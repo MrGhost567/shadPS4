@@ -8,6 +8,7 @@
 
 #include "common/assert.h"
 #include "common/types.h"
+#include "video_core/amdgpu/liverpool.h"
 
 namespace Shader {
 
@@ -98,6 +99,11 @@ struct ComputeRuntimeInfo {
     }
 };
 
+struct GeometryRuntimeInfo {
+    AmdGpu::Liverpool::GsPrimType gs_out_prim_type;
+    AmdGpu::Liverpool::GsCutMode gs_cut_mode;
+};
+
 /**
  * Stores information relevant to shader compilation sourced from liverpool registers.
  * It may potentially differ with the same shader module so must be checked.
@@ -111,6 +117,7 @@ struct RuntimeInfo {
     VertexRuntimeInfo vs_info;
     FragmentRuntimeInfo fs_info;
     ComputeRuntimeInfo cs_info;
+    GeometryRuntimeInfo gs_info;
 
     RuntimeInfo(Stage stage_) : stage{stage_} {}
 

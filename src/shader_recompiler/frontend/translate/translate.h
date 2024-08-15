@@ -220,6 +220,7 @@ public:
     void DS_APPEND(const GcnInst& inst);
     void DS_CONSUME(const GcnInst& inst);
     void S_BARRIER();
+    void S_SENDMSG(const GcnInst& inst);
 
     // MIMG
     void IMAGE_GET_RESINFO(const GcnInst& inst);

@@ -112,6 +112,23 @@ Shader::RuntimeInfo PipelineCache::BuildRuntimeInfo(Shader::Stage stage) {
         info.cs_info.shared_memory_size = cs_pgm.SharedMemSize();
         break;
     }
+    case Shader::Stage::Export: {
+        info.num_user_data = regs.es_program.settings.num_user_regs;
+        info.num_input_vgprs = regs.es_program.settings.vgpr_comp_cnt;
+        break;
+    }
+    case Shader::Stage::Geometry: {
+        info.num_user_data = regs.gs_program.settings.num_user_regs;
+        info.gs_info.gs_cut_mode = regs.gs_mode.cut_mode;
+
+        if (!regs.gs_out_prim_type.unique_type_per_stream) {
+            info.gs_info.gs_out_prim_type = regs.gs_out_prim_type.outprim_type;
+        } else {
+            UNREACHABLE_MSG("Streamout is unsupported");
+        }
+
+        break;
+    }
     default:
         break;
     }
@@ -281,6 +298,7 @@ bool PipelineCache::RefreshGraphicsKey() {
             infos[i] = nullptr;
             continue;
         }
+
         const auto* bininfo = Liverpool::GetBinaryInfo(*pgm);
         if (!bininfo->Valid()) {
             LOG_WARNING(Render_Vulkan, "Invalid binary info structure!");
@@ -298,15 +316,16 @@ bool PipelineCache::RefreshGraphicsKey() {
             return false;
         }
 
-        static bool TessMissingLogged = false;
-        if (auto* pgm = regs.ProgramForStage(3);
-            regs.stage_enable.IsStageEnabled(3) && pgm->Address() != 0) {
-            if (!TessMissingLogged) {
-                LOG_WARNING(Render_Vulkan, "Tess pipeline compilation skipped");
-                TessMissingLogged = true;
-            }
-            return false;
-        }
+        // TODO
+        //        static bool TessMissingLogged = false;
+        //        if (auto* pgm = regs.ProgramForStage(3);
+        //            regs.stage_enable.IsStageEnabled(3) && pgm->Address() != 0) {
+        //            if (!TessMissingLogged) {
+        //                LOG_WARNING(Render_Vulkan, "Tess pipeline compilation skipped");
+        //                TessMissingLogged = true;
+        //            }
+        //            return false;
+        //        }
 
         std::tie(infos[i], modules[i], key.stage_hashes[i]) = GetProgram(stage, params, binding);
     }

@@ -187,7 +187,13 @@ GraphicsPipeline::GraphicsPipeline(const Instance& instance_, Scheduler& schedul
         .maxDepthBounds = key.depth_bounds_max,
     };
 
-    auto stage = u32(Shader::Stage::Vertex);
+    u32 stage;
+    if (infos[u32(Shader::Stage::Geometry)]) {
+        stage = u32(Shader::Stage::Export);
+    } else {
+        stage = u32(Shader::Stage::Vertex);
+    }
+
     boost::container::static_vector<vk::PipelineShaderStageCreateInfo, MaxShaderStages>
         shader_stages;
     if (infos[stage]) {
@@ -197,6 +203,16 @@ GraphicsPipeline::GraphicsPipeline(const Instance& instance_, Scheduler& schedul
             .pName = "main",
         });
     }
+
+    stage = u32(Shader::Stage::Geometry);
+    if (infos[stage]) {
+        shader_stages.emplace_back(vk::PipelineShaderStageCreateInfo{
+            .stage = vk::ShaderStageFlagBits::eGeometry,
+            .module = modules[stage],
+            .pName = "main",
+        });
+    }
+
     stage = u32(Shader::Stage::Fragment);
     if (infos[stage]) {
         shader_stages.emplace_back(vk::PipelineShaderStageCreateInfo{

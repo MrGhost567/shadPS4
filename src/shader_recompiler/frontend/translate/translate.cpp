@@ -34,6 +34,7 @@ void Translator::EmitPrologue() {
 
     IR::VectorReg dst_vreg = IR::VectorReg::V0;
     switch (info.stage) {
+    case Stage::Export:
     case Stage::Vertex:
         // v0: vertex ID, always present
         ir.SetVectorReg(dst_vreg++, ir.GetAttributeU32(IR::Attribute::VertexId));
@@ -75,6 +76,10 @@ void Translator::EmitPrologue() {
         if (runtime_info.cs_info.tgid_enable[2]) {
             ir.SetScalarReg(dst_sreg++, ir.GetAttributeU32(IR::Attribute::WorkgroupId, 2));
         }
+        break;
+    case Stage::Geometry:
+        dst_vreg = IR::VectorReg::V2;
+        ir.SetVectorReg(dst_vreg, ir.GetAttributeU32(IR::Attribute::PrimitiveId));
         break;
     default:
         throw NotImplementedException("Unknown shader stage");
@@ -430,6 +435,8 @@ void Translator::EmitFlowControl(u32 pc, const GcnInst& inst) {
         return;
     case Opcode::S_GETPC_B64:
         return S_GETPC_B64(pc, inst);
+    case Opcode::S_SENDMSG:
+        return S_SENDMSG(inst);
     case Opcode::S_WAITCNT:
     case Opcode::S_NOP:
     case Opcode::S_ENDPGM:
@@ -464,7 +471,7 @@ void Translate(IR::Block* block, u32 pc, std::span<const GcnInst> inst_list, Inf
 
         // Special case for emitting fetch shader.
         if (inst.opcode == Opcode::S_SWAPPC_B64) {
-            ASSERT(info.stage == Stage::Vertex);
+            ASSERT(info.stage == Stage::Vertex || info.stage == Stage::Export);
             translator.EmitFetch(inst);
             continue;
         }

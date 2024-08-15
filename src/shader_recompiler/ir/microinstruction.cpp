@@ -50,6 +50,8 @@ bool Inst::MayHaveSideEffects() const noexcept {
     case Opcode::Epilogue:
     case Opcode::Discard:
     case Opcode::DiscardCond:
+    case Opcode::EmitVertex:
+    case Opcode::EndPrimitive:
     case Opcode::SetAttribute:
     case Opcode::StoreBufferU32:
     case Opcode::StoreBufferU32x2:
