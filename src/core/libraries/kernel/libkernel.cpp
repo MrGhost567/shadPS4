@@ -21,6 +21,7 @@
 #include "core/libraries/kernel/file_system.h"
 #include "core/libraries/kernel/libkernel.h"
 #include "core/libraries/kernel/memory_management.h"
+#include "core/libraries/kernel/select.h"
 #include "core/libraries/kernel/thread_management.h"
 #include "core/libraries/kernel/time_management.h"
 #include "core/libraries/libs.h"
@@ -398,6 +399,31 @@ int PS4_SYSV_ABI posix_getpagesize() {
     return 4096;
 }
 
+int PS4_SYSV_ABI select(int nfds, OrbisFdSet* readfds, OrbisFdSet* writefds, OrbisFdSet* exceptfds,
+                        OrbisKernelTimeval* timeval) {
+    if ((readfds && OrbisFdSet::any(readfds)) || (writefds && OrbisFdSet::any(writefds)) ||
+        (exceptfds && OrbisFdSet::any(exceptfds))) {
+        LOG_ERROR(Kernel, "(STUBBED) with nonzero fd_set, unimplemented");
+    } else {
+        // Only seen this so far
+        // Only explanation that makes sense, from manpage:
+        // "Before the advent of usleep(3), some code employed a call to
+        // select() with all three sets empty, nfds zero, and a non-NULL
+        // timeout as a fairly portable way to sleep with subsecond
+        // precision."
+        u64 usec_timeout = timeval ? timeval->tv_sec * 1000000 + timeval->tv_usec : 0;
+        LOG_TRACE(Kernel, "(STUBBED) with all empty fd_sets, max fd = {}, timeout = {}us", nfds,
+                  usec_timeout);
+
+        if (usec_timeout) {
+            LOG_TRACE(Kernel, "select redirect to sceKernelUsleep");
+            sceKernelUsleep(timeval->tv_sec * 1000000 + timeval->tv_usec);
+        }
+    }
+
+    return 0;
+}
+
 void LibKernel_Register(Core::Loader::SymbolsResolver* sym) {
     service_thread = std::jthread{KernelServiceThread};
 
@@ -471,6 +497,7 @@ void LibKernel_Register(Core::Loader::SymbolsResolver* sym) {
     LIB_FUNCTION("WB66evu8bsU", "libkernel", 1, "libkernel", 1, 1, sceKernelGetCompiledSdkVersion);
     LIB_FUNCTION("DRuBt2pvICk", "libkernel", 1, "libkernel", 1, 1, ps4__read);
     LIB_FUNCTION("k+AXqu2-eBc", "libScePosix", 1, "libkernel", 1, 1, posix_getpagesize);
+    LIB_FUNCTION("T8fER+tIGgk", "libScePosix", 1, "libkernel", 1, 1, select);
 
     Libraries::Kernel::fileSystemSymbolsRegister(sym);
     Libraries::Kernel::timeSymbolsRegister(sym);
