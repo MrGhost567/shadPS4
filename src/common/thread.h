@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <string>
 #include "common/types.h"
 
 namespace Common {
@@ -19,5 +20,7 @@ enum class ThreadPriority : u32 {
 void SetCurrentThreadPriority(ThreadPriority new_priority);
 
 void SetCurrentThreadName(const char* name);
+
+std::string GetCurrentThreadName();
 
 } // namespace Common

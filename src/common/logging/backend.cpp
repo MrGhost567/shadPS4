@@ -6,6 +6,8 @@
 #include <thread>
 
 #include <fmt/format.h>
+#include <pthread.h>
+#include <unistd.h>
 
 #ifdef _WIN32
 #include <windows.h> // For OutputDebugStringW
@@ -194,15 +196,19 @@ public:
         using std::chrono::microseconds;
         using std::chrono::steady_clock;
 
-        const Entry entry = {
-            .timestamp = duration_cast<microseconds>(steady_clock::now() - time_origin),
-            .log_class = log_class,
-            .log_level = log_level,
-            .filename = filename,
-            .line_num = line_num,
-            .function = function,
-            .message = std::move(message),
-        };
+        std::string thread_name = GetCurrentThreadName();
+        s32 tid = gettid();
+
+        const Entry entry = {.timestamp =
+                                 duration_cast<microseconds>(steady_clock::now() - time_origin),
+                             .log_class = log_class,
+                             .log_level = log_level,
+                             .filename = filename,
+                             .line_num = line_num,
+                             .function = function,
+                             .message = std::move(message),
+                             .thread_name = std::move(thread_name),
+                             .thread_id = tid};
         if (Config::getLogType() == "async") {
             message_queue.EmplaceWait(entry);
         } else {

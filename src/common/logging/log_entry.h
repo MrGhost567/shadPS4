@@ -4,6 +4,7 @@
 #pragma once
 
 #include <chrono>
+#include <thread>
 
 #include "common/logging/types.h"
 
@@ -21,6 +22,8 @@ struct Entry {
     u32 line_num = 0;
     std::string function;
     std::string message;
+    std::string thread_name;
+    s32 thread_id;
 };
 
 } // namespace Common::Log
