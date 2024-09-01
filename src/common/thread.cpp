@@ -164,4 +164,35 @@ void SetCurrentThreadName(const char*) {
 
 #endif
 
+#ifdef _MSC_VER
+
+void SetCurrentThreadName(const char* name) {
+    GetThreadDescription(GetCurrentThread());
+}
+
+#else // !MSVC_VER, so must be POSIX threads
+
+#if !defined(_WIN32) || defined(_MSC_VER)
+std::string GetCurrentThreadName() {
+    static constexpr size_t BUFSIZE = 256;
+    char buf[BUFSIZE];
+    if (int e = pthread_getname_np(pthread_self(), buf, BUFSIZE)) {
+        errno = e;
+        LOG_ERROR(Common, "Failed to get thread name");
+        return "";
+    }
+
+    return buf;
+}
+#endif
+
+#if defined(_WIN32)
+// MingW
+std::string GetCurrentThreadName() {
+    return "";
+}
+#endif
+
+#endif
+
 } // namespace Common
