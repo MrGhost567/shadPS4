@@ -5,6 +5,7 @@
 #pragma once
 
 #include <chrono>
+#include <string>
 #include "common/types.h"
 
 namespace Common {
@@ -22,5 +23,7 @@ void SetCurrentThreadRealtime(std::chrono::nanoseconds period_ns);
 void SetCurrentThreadPriority(ThreadPriority new_priority);
 
 void SetCurrentThreadName(const char* name);
+
+std::string GetCurrentThreadName();
 
 } // namespace Common
