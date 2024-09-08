@@ -175,6 +175,7 @@ Id DefineMain(EmitContext& ctx, const IR::Program& program) {
 
 void DefineEntryPoint(const IR::Program& program, EmitContext& ctx, Id main) {
     const auto& info = program.info;
+    const auto& runtime_info = ctx.runtime_info;
     const std::span interfaces(ctx.interfaces.data(), ctx.interfaces.size());
     spv::ExecutionModel execution_model{};
     ctx.AddCapability(spv::Capability::Image1D);
@@ -241,7 +242,7 @@ void DefineEntryPoint(const IR::Program& program, EmitContext& ctx, Id main) {
         ctx.AddExecutionMode(main, spv::ExecutionMode::Triangles);
         ctx.AddExecutionMode(main, spv::ExecutionMode::Invocations, 1);
 
-        switch (info.gs_out_prim_type) {
+        switch (runtime_info.gs_info.gs_out_prim_type) {
         case AmdGpu::Liverpool::GsPrimType::PointList:
             ctx.AddExecutionMode(main, spv::ExecutionMode::OutputPoints);
             break;
@@ -255,7 +256,7 @@ void DefineEntryPoint(const IR::Program& program, EmitContext& ctx, Id main) {
             UNREACHABLE_MSG("Unexpected GS primitive type");
         }
 
-        switch (info.gs_cut_mode) {
+        switch (runtime_info.gs_info.gs_cut_mode) {
         case AmdGpu::Liverpool::GsCutMode::GsCut1024:
             ctx.AddExecutionMode(main, spv::ExecutionMode::OutputVertices, 1024);
             break;

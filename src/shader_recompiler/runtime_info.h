@@ -99,9 +99,15 @@ struct ComputeRuntimeInfo {
     }
 };
 
+// Forward declaration because Program contains references to Info
+namespace IR {
+class Program;
+}
+
 struct GeometryRuntimeInfo {
     AmdGpu::Liverpool::GsPrimType gs_out_prim_type;
     AmdGpu::Liverpool::GsCutMode gs_cut_mode;
+    IR::Program* gs_copy_shader;
 };
 
 /**

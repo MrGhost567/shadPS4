@@ -5,6 +5,7 @@
 
 #include "shader_recompiler/ir/basic_block.h"
 #include "shader_recompiler/ir/program.h"
+#include "shader_recompiler/runtime_info.h"
 
 namespace Shader::Optimization {
 
@@ -15,6 +16,6 @@ void ConstantPropagationPass(IR::BlockList& program);
 void ResourceTrackingPass(IR::Program& program);
 void CollectShaderInfoPass(IR::Program& program);
 void LowerSharedMemToRegisters(IR::Program& program);
-void MergeCopyShaderPass(IR::Program& program);
+void MergeCopyShaderPass(IR::Program& program, RuntimeInfo& runtime_info);
 
 } // namespace Shader::Optimization

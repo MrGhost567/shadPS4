@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "shader_recompiler/ir/program.h"
+#include "shader_recompiler/runtime_info.h"
 
 namespace Shader::Optimization {
 
-void Visit(Info& info, IR::Block::InstructionList& list, IR::Inst& inst) {
+void Visit(RuntimeInfo& runtime_info, IR::Block::InstructionList& list, IR::Inst& inst) {
     if (inst.GetOpcode() == IR::Opcode::EmitVertex) {
-        IR::Program* copy_program = info.gs_copy_shader;
+        IR::Program* copy_program = runtime_info.gs_info.gs_copy_shader;
         ASSERT(copy_program->info.stage == Stage::Vertex);
 
         // Insert for each instruction on the copy shader
@@ -20,7 +21,7 @@ void Visit(Info& info, IR::Block::InstructionList& list, IR::Inst& inst) {
     }
 }
 
-void MergeCopyShaderPass(IR::Program& program) {
+void MergeCopyShaderPass(IR::Program& program, RuntimeInfo& runtime_info) {
     if (program.info.stage != Shader::Stage::Geometry) {
         return;
     }
@@ -29,7 +30,7 @@ void MergeCopyShaderPass(IR::Program& program) {
     for (IR::Block* const block : program.post_order_blocks) {
         IR::Block::InstructionList& list{block->Instructions()};
         for (IR::Inst& inst : list) {
-            Visit(info, list, inst);
+            Visit(runtime_info, list, inst);
         }
     }
 }
