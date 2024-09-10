@@ -19,6 +19,7 @@
 #include "common/types.h"
 #include "common/unique_function.h"
 #include "shader_recompiler/params.h"
+#include "shader_recompiler/shader_stages.h"
 #include "video_core/amdgpu/pixel_format.h"
 #include "video_core/amdgpu/resource.h"
 
@@ -193,7 +194,7 @@ struct Liverpool {
     static constexpr auto* GetBinaryInfo(const Shader& sh) {
         const auto* code = sh.template Address<u32*>();
         const auto* bininfo = std::bit_cast<const BinaryInfo*>(code + (code[1] + 1) * 2);
-        // ASSERT_MSG(bininfo->Valid(), "Invalid shader binary header");
+        ASSERT_MSG(bininfo->Valid(), "Invalid shader binary header");
         return bininfo;
     }
 
@@ -956,7 +957,7 @@ struct Liverpool {
         BitField<5, 1, u32> gs_en;
         BitField<6, 1, u32> vs_en;
 
-        bool IsStageEnabled(u32 stage) {
+        bool IsStageEnabled(u32 stage) const {
             switch (stage) {
             case 0:
             case 1:
@@ -1093,6 +1094,48 @@ struct Liverpool {
                 return &ls_program;
             }
             return nullptr;
+        }
+
+        Shader::SWStage getSwStageFromHwStage(Shader::Stage stage) const {
+            switch (stage) {
+            case Shader::Stage::Fragment:
+                return Shader::SWStage::FS;
+            case Shader::Stage::Vertex:
+                if (stage_enable.IsStageEnabled(static_cast<u32>(Shader::Stage::Geometry))) {
+                    return Shader::SWStage::GSCopy;
+                } else if (stage_enable.IsStageEnabled(static_cast<u32>(Shader::Stage::Hull))) {
+                    return Shader::SWStage::TES;
+                } else {
+                    return Shader::SWStage::VS;
+                }
+                break;
+            case Shader::Stage::Geometry:
+                return Shader::SWStage::GS;
+            case Shader::Stage::Export:
+                if (stage_enable.IsStageEnabled(static_cast<u32>(Shader::Stage::Geometry))) {
+                    if (stage_enable.IsStageEnabled(static_cast<u32>(Shader::Stage::Hull))) {
+                        return Shader::SWStage::TES;
+                    } else {
+                        return Shader::SWStage::VS;
+                    }
+                } else if (stage_enable.IsStageEnabled(static_cast<u32>(Shader::Stage::Hull))) {
+                    return Shader::SWStage::TES;
+                }
+                break;
+            case Shader::Stage::Hull:
+                return Shader::SWStage::TCS;
+            case Shader::Stage::Local:
+                if (stage_enable.IsStageEnabled(static_cast<u32>(Shader::Stage::Hull))) {
+                    return Shader::SWStage::VS;
+                }
+            case Shader::Stage::Compute:
+                return Shader::SWStage::CS;
+            }
+
+            return static_cast<Shader::SWStage>(-1);
+        }
+        Shader::SWStage getSwStageFromHwStage(u32 stage) const {
+            return getSwStageFromHwStage(static_cast<Shader::Stage>(stage));
         }
 
         void SetDefaults();

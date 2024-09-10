@@ -8,11 +8,14 @@
 #include "common/path_util.h"
 #include "shader_recompiler/backend/spirv/emit_spirv.h"
 #include "shader_recompiler/info.h"
+#include "shader_recompiler/runtime_info.h"
+#include "shader_recompiler/shader_stages.h"
 #include "video_core/renderer_vulkan/renderer_vulkan.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_pipeline_cache.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
 #include "video_core/renderer_vulkan/vk_shader_util.h"
+#include "vulkan/vulkan_core.h"
 
 extern std::unique_ptr<Vulkan::RendererVulkan> renderer;
 
@@ -72,6 +75,11 @@ void GatherVertexOutputs(Shader::VertexRuntimeInfo& info,
 Shader::RuntimeInfo PipelineCache::BuildRuntimeInfo(Shader::Stage stage) {
     auto info = Shader::RuntimeInfo{stage};
     const auto& regs = liverpool->regs;
+    Shader::SWStage software_stage = regs.getSwStageFromHwStage(stage);
+    info.software_stage = software_stage;
+    if (regs.stage_enable.IsStageEnabled(static_cast<u32>(Shader::Stage::Geometry))) {
+        info.geom_enabled = true; // TODO delete
+    }
     switch (stage) {
     case Shader::Stage::Vertex: {
         info.num_user_data = regs.vs_program.settings.num_user_regs;
@@ -120,6 +128,7 @@ Shader::RuntimeInfo PipelineCache::BuildRuntimeInfo(Shader::Stage stage) {
     case Shader::Stage::Geometry: {
         info.num_user_data = regs.gs_program.settings.num_user_regs;
         info.gs_info.gs_cut_mode = regs.gs_mode.cut_mode;
+        info.gs_info.gs_mode = regs.gs_mode.mode;
 
         if (!regs.gs_out_prim_type.unique_type_per_stream) {
             info.gs_info.gs_out_prim_type = regs.gs_out_prim_type.outprim_type;
@@ -312,7 +321,8 @@ bool PipelineCache::RefreshGraphicsKey() {
         const auto stage = Shader::StageFromIndex(i);
         const auto params = Liverpool::GetParams(*pgm);
 
-        if (stage != Shader::Stage::Vertex && stage != Shader::Stage::Fragment) {
+        if (stage != Shader::Stage::Vertex && stage != Shader::Stage::Fragment &&
+            stage != Shader::Stage::Export && stage != Shader::Stage::Geometry) {
             return false;
         }
 
@@ -355,6 +365,13 @@ vk::ShaderModule PipelineCache::CompileModule(Shader::Info& info,
     }
 
     const auto ir_program = Shader::TranslateProgram(code, pools, info, runtime_info, profile);
+#if 1
+    if (runtime_info.software_stage == Shader::SWStage::GSCopy ||
+        runtime_info.stage == Shader::Stage::Export ||
+        runtime_info.stage == Shader::Stage::Geometry) {
+        return VK_NULL_HANDLE;
+    }
+#endif
     const auto spv = Shader::Backend::SPIRV::EmitSPIRV(profile, runtime_info, ir_program, binding);
     if (Config::dumpShaders()) {
         DumpShader(spv, info.pgm_hash, info.stage, perm_idx, "spv");
@@ -369,7 +386,10 @@ vk::ShaderModule PipelineCache::CompileModule(Shader::Info& info,
 std::tuple<const Shader::Info*, vk::ShaderModule, u64> PipelineCache::GetProgram(
     Shader::Stage stage, Shader::ShaderParams params, u32& binding) {
     const auto runtime_info = BuildRuntimeInfo(stage);
-    auto [it_pgm, new_program] = program_cache.try_emplace(params.hash);
+    // DONT MERGE Hack because GSCopyShader and GS shader have same params.hash for some reason in
+    // sample
+    u64 hash = HashCombine(params.hash, static_cast<u64>(stage));
+    auto [it_pgm, new_program] = program_cache.try_emplace(hash);
     if (new_program) {
         Program* program = program_pool.Create(stage, params);
         u32 start_binding = binding;
@@ -377,7 +397,10 @@ std::tuple<const Shader::Info*, vk::ShaderModule, u64> PipelineCache::GetProgram
         const auto spec = Shader::StageSpecialization(program->info, runtime_info, start_binding);
         program->AddPermut(module, std::move(spec));
         it_pgm.value() = program;
-        return std::make_tuple(&program->info, module, HashCombine(params.hash, 0));
+        return std::make_tuple(&program->info, module, hash /* hack DONT MERGE */);
+    } else {
+        LOG_INFO(Render_Vulkan, "Found in program cache for {} shader {:#x} {}", stage, params.hash,
+                 0 != 0 ? "(permutation)" : "");
     }
 
     Program* program = it_pgm->second;

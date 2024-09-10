@@ -220,6 +220,18 @@ void EmitSetAttribute(EmitContext& ctx, IR::Attribute attr, Id value, u32 elemen
     ctx.OpStore(pointer, ctx.OpBitcast(ctx.F32[1], value));
 }
 
+void EmitGetInterstageAttributeIn(EmitContext& ctx, u32 vaddr, u32 soffset) {
+    // TODO
+}
+
+void EmitGetInterstageAttributeOut(EmitContext& ctx, u32 vaddr, u32 soffset, Id value) {
+    UNREACHABLE_MSG("Unreachable instruction");
+}
+
+void EmitSetInterstageAttributeOut(EmitContext& ctx, u32 attr, Id value) {
+    // TODO
+}
+
 template <u32 N>
 static Id EmitLoadBufferU32xN(EmitContext& ctx, u32 handle, Id address) {
     auto& buffer = ctx.buffers[handle];
@@ -268,6 +280,10 @@ Id EmitLoadBufferFormatF32(EmitContext& ctx, IR::Inst* inst, u32 handle, Id addr
     return texel;
 }
 
+Id EmitLoadBufferWithOffU32(EmitContext& ctx, IR::Inst* inst, u32 handle, Id address, Id soffset) {
+    UNREACHABLE_MSG("Unreachable instruction");
+}
+
 template <u32 N>
 static void EmitStoreBufferU32xN(EmitContext& ctx, u32 handle, Id address, Id value) {
     auto& buffer = ctx.buffers[handle];
@@ -310,6 +326,11 @@ void EmitStoreBufferFormatF32(EmitContext& ctx, IR::Inst* inst, u32 handle, Id a
         value = ctx.OpBitcast(ctx.U32[4], value);
     }
     ctx.OpImageWrite(tex_buffer, coord, value);
+}
+
+void EmitStoreBufferWithOffU32(EmitContext& ctx, IR::Inst* inst, u32 handle, Id address, Id value,
+                               Id soffset) {
+    UNREACHABLE_MSG("Unreachable instruction");
 }
 
 } // namespace Shader::Backend::SPIRV

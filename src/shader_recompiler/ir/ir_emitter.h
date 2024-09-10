@@ -85,6 +85,11 @@ public:
     [[nodiscard]] U32 GetAttributeU32(Attribute attribute, u32 comp = 0);
     void SetAttribute(Attribute attribute, const F32& value, u32 comp = 0);
 
+    [[nodiscard]] U32 GetInterstageAttributeIn(const IR::U32&, const IR::U32& scalar_off);
+    [[nodiscard]] U32 GetInterstageAttributeOut(const IR::U32&, const IR::U32& scalar_off);
+    void SetInterstageAttributeOut(const IR::U32& vaddr, const IR::U32& scalar_off,
+                                   const U32& value);
+
     [[nodiscard]] Value LoadShared(int bit_size, bool is_signed, const U32& offset);
     void WriteShared(int bit_size, const Value& value, const U32& offset);
 
@@ -96,11 +101,11 @@ public:
     [[nodiscard]] U32 ReadConstBuffer(const Value& handle, const U32& index);
 
     [[nodiscard]] Value LoadBuffer(int num_dwords, const Value& handle, const Value& address,
-                                   BufferInstInfo info);
+                                   BufferInstInfo info, const Value& soffset = IR::Value{0u});
     [[nodiscard]] Value LoadBufferFormat(const Value& handle, const Value& address,
                                          BufferInstInfo info);
     void StoreBuffer(int num_dwords, const Value& handle, const Value& address, const Value& data,
-                     BufferInstInfo info);
+                     BufferInstInfo info, const Value& soffset = IR::Value{0u});
     void StoreBufferFormat(const Value& handle, const Value& address, const Value& data,
                            BufferInstInfo info);
 

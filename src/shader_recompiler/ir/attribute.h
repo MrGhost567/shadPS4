@@ -72,8 +72,12 @@ enum class Attribute : u64 {
     LocalInvocationId = 75,
     LocalInvocationIndex = 76,
     FragCoord = 77,
-    InstanceId0 = 78, // step rate 0
-    InstanceId1 = 79, // step rate 1
+    InstanceId0 = 78,    // step rate 0
+    InstanceId1 = 79,    // step rate 1
+    VertexIdGsCopy = 80, // Dummy, not sure if this is appropriate
+    GsVertexIdA = 81,
+    GsVertexIdB = 82,
+    GsVertexIdC = 82, // TODO add D for quads?
     Max,
 };
 

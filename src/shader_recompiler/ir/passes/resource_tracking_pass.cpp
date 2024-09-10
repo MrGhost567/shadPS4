@@ -2,12 +2,17 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
+#include <optional>
 #include <boost/container/small_vector.hpp>
+#include "common/assert.h"
 #include "shader_recompiler/info.h"
 #include "shader_recompiler/ir/basic_block.h"
 #include "shader_recompiler/ir/breadth_first_search.h"
 #include "shader_recompiler/ir/ir_emitter.h"
 #include "shader_recompiler/ir/program.h"
+#include "shader_recompiler/ir/reg.h"
+#include "shader_recompiler/ir/value.h"
+#include "shader_recompiler/runtime_info.h"
 #include "video_core/amdgpu/resource.h"
 
 namespace Shader::Optimization {
@@ -45,6 +50,7 @@ bool IsBufferStore(const IR::Inst& inst) {
     case IR::Opcode::StoreBufferU32x2:
     case IR::Opcode::StoreBufferU32x3:
     case IR::Opcode::StoreBufferU32x4:
+    case IR::Opcode::StoreBufferWithOffU32:
         return true;
     default:
         return IsBufferAtomic(inst);
@@ -57,6 +63,7 @@ bool IsBufferInstruction(const IR::Inst& inst) {
     case IR::Opcode::LoadBufferU32x2:
     case IR::Opcode::LoadBufferU32x3:
     case IR::Opcode::LoadBufferU32x4:
+    case IR::Opcode::LoadBufferWithOffU32:
     case IR::Opcode::ReadConstBuffer:
         return true;
     default:
@@ -374,10 +381,54 @@ s32 TryHandleInlineCbuf(IR::Inst& inst, Info& info, Descriptors& descriptors,
     });
 }
 
+bool TryHandleInterstageAttributeLoadStore(IR::Inst& inst, const RuntimeInfo& runtime_info) {
+    // TODO dont hardcode
+    if (!runtime_info.isGeometryRelated()) {
+        return false;
+    }
+
+    IR::Value soffset;
+    switch (inst.GetOpcode()) {
+    case IR::Opcode::LoadBufferU32:
+    case IR::Opcode::StoreBufferU32:
+        soffset = IR::U32{0};
+        break;
+    case IR::Opcode::LoadBufferWithOffU32:
+    case IR::Opcode::StoreBufferWithOffU32:
+        soffset = inst.Arg(4);
+        break;
+    default:
+        return false;
+    }
+
+    IR::Value handle = inst.Arg(0);
+    const auto sharp = TrackSharp(handle.InstRecursive());
+    if (sharp.sgpr_base != static_cast<u32>(IR::ScalarReg::Max)) {
+        // TODO dont hardcode
+        // (this is hardcoded based on geometry shader sample)
+        switch (runtime_info.stage) {
+        case Shader::Stage::Vertex:
+            if (sharp.sgpr_base == static_cast<u32>(IR::ScalarReg::Max))
+                break;
+        case Shader::Stage::Geometry:
+            break;
+        case Shader::Stage::Export:
+            break;
+        default:
+            UNREACHABLE_MSG("shouldnt be here");
+            break;
+        }
+    }
+}
+
 void PatchBufferInstruction(IR::Block& block, IR::Inst& inst, Info& info,
-                            Descriptors& descriptors) {
+                            const RuntimeInfo& runtime_info, Descriptors& descriptors) {
     s32 binding{};
     AmdGpu::Buffer buffer;
+    if (TryHandleInterstageAttributeLoadStore(inst, runtime_info)) {
+        return;
+    }
+
     if (binding = TryHandleInlineCbuf(inst, info, descriptors, buffer); binding == -1) {
         IR::Inst* handle = inst.Arg(0).InstRecursive();
         IR::Inst* producer = handle->Arg(0).InstRecursive();
@@ -654,14 +705,14 @@ void PatchDataRingInstruction(IR::Block& block, IR::Inst& inst, Info& info,
     inst.SetArg(1, ir.Imm32(binding));
 }
 
-void ResourceTrackingPass(IR::Program& program) {
+void ResourceTrackingPass(IR::Program& program, const RuntimeInfo& runtime_info) {
     // Iterate resource instructions and patch them after finding the sharp.
     auto& info = program.info;
     Descriptors descriptors{info};
     for (IR::Block* const block : program.blocks) {
         for (IR::Inst& inst : block->Instructions()) {
             if (IsBufferInstruction(inst)) {
-                PatchBufferInstruction(*block, inst, info, descriptors);
+                PatchBufferInstruction(*block, inst, info, runtime_info, descriptors);
                 continue;
             }
             if (IsTextureBufferInstruction(inst)) {

@@ -13,7 +13,7 @@ void SsaRewritePass(IR::BlockList& program);
 void IdentityRemovalPass(IR::BlockList& program);
 void DeadCodeEliminationPass(IR::Program& program);
 void ConstantPropagationPass(IR::BlockList& program);
-void ResourceTrackingPass(IR::Program& program);
+void ResourceTrackingPass(IR::Program& program, const RuntimeInfo& runtime_info);
 void CollectShaderInfoPass(IR::Program& program);
 void LowerSharedMemToRegisters(IR::Program& program);
 void MergeCopyShaderPass(IR::Program& program, RuntimeInfo& runtime_info);

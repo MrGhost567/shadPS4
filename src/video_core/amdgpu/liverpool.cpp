@@ -347,6 +347,8 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
                 if (rasterizer) {
                     const auto cmd_address = reinterpret_cast<const void*>(header);
                     rasterizer->ScopeMarkerBegin(fmt::format("dcb:{}:DrawIndex2", cmd_address));
+                    // TODO delete
+                    LOG_INFO(Lib_GnmDriver, "Draw Indexed call");
                     rasterizer->Draw(true);
                     rasterizer->ScopeMarkerEnd();
                 }

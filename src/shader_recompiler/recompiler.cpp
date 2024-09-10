@@ -6,7 +6,9 @@
 #include "shader_recompiler/frontend/structured_control_flow.h"
 #include "shader_recompiler/ir/passes/ir_passes.h"
 #include "shader_recompiler/ir/post_order.h"
+#include "shader_recompiler/ir/program.h"
 #include "shader_recompiler/recompiler.h"
+#include "shader_recompiler/shader_stages.h"
 
 namespace Shader {
 
@@ -51,19 +53,30 @@ IR::Program TranslateProgram(std::span<const u32> code, Pools& pools, Info& info
     Common::ObjectPool<Gcn::Block> gcn_block_pool{64};
     Gcn::CFG cfg{gcn_block_pool, program.ins_list};
 
+#if 0
+    if (runtime_info.software_stage == Shader::SWStage::GSCopy ||
+        runtime_info.stage == Shader::Stage::Export ||
+        runtime_info.stage == Shader::Stage::Geometry) {
+        return program;
+    }
+#endif
+
     // Structurize control flow graph and create program.
     program.syntax_list = Shader::Gcn::BuildASL(pools.inst_pool, pools.block_pool, cfg,
                                                 program.info, runtime_info, profile);
     program.blocks = GenerateBlocks(program.syntax_list);
     program.post_order_blocks = Shader::IR::PostOrder(program.syntax_list.front());
-
+    LOG_DEBUG(Render_Recompiler, "{}_{:#x} : IR after translate:\n{}", info.stage, info.pgm_hash,
+              Shader::IR::DumpProgram(program));
     // Run optimization passes
     Shader::Optimization::SsaRewritePass(program.post_order_blocks);
     Shader::Optimization::ConstantPropagationPass(program.post_order_blocks);
     if (program.info.stage != Stage::Compute) {
         Shader::Optimization::LowerSharedMemToRegisters(program);
     }
-    Shader::Optimization::ResourceTrackingPass(program);
+    LOG_DEBUG(Render_Recompiler, "{}_{:#x} : IR before resource tracking:\n{}", info.stage,
+              info.pgm_hash, Shader::IR::DumpProgram(program));
+    Shader::Optimization::ResourceTrackingPass(program, runtime_info);
     Shader::Optimization::IdentityRemovalPass(program.blocks);
     Shader::Optimization::DeadCodeEliminationPass(program);
     Shader::Optimization::CollectShaderInfoPass(program);

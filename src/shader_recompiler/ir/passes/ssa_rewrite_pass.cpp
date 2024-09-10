@@ -53,8 +53,19 @@ struct ThreadBitScalar : FlagTag {
     IR::ScalarReg sgpr;
 };
 
-using Variant = std::variant<IR::ScalarReg, IR::VectorReg, GotoVariable, ThreadBitScalar,
-                             SccFlagTag, ExecFlagTag, VccFlagTag, VccLoTag, VccHiTag, M0Tag>;
+// Use to merge the GS and CopyGS stages
+struct InterstageAttributeOut : FlagTag {
+    InterstageAttributeOut() = default;
+    explicit InterstageAttributeOut(u32 index_) : index{index_} {}
+
+    auto operator<=>(const InterstageAttributeOut&) const noexcept = default;
+
+    u32 index;
+};
+
+using Variant =
+    std::variant<IR::ScalarReg, IR::VectorReg, GotoVariable, ThreadBitScalar, SccFlagTag,
+                 ExecFlagTag, VccFlagTag, VccLoTag, VccHiTag, M0Tag, InterstageAttributeOut>;
 using ValueMap = std::unordered_map<IR::Block*, IR::Value>;
 
 struct DefTable {
@@ -77,6 +88,13 @@ struct DefTable {
     }
     void SetDef(IR::Block* block, GotoVariable variable, const IR::Value& value) {
         goto_vars[variable.index].insert_or_assign(block, value);
+    }
+
+    const IR::Value& Def(IR::Block* block, InterstageAttributeOut variable) {
+        return interstage_attr_out_vars[variable.index][block];
+    }
+    void SetDef(IR::Block* block, InterstageAttributeOut variable, const IR::Value& value) {
+        interstage_attr_out_vars[variable.index].insert_or_assign(block, value);
     }
 
     const IR::Value& Def(IR::Block* block, ThreadBitScalar variable) {
@@ -128,6 +146,7 @@ struct DefTable {
     }
 
     std::unordered_map<u32, ValueMap> goto_vars;
+    std::unordered_map<u32, ValueMap> interstage_attr_out_vars;
     ValueMap scc_flag;
     ValueMap exec_flag;
     ValueMap vcc_flag;
@@ -345,6 +364,9 @@ void VisitInst(Pass& pass, IR::Block* block, IR::Inst& inst) {
     case IR::Opcode::SetGotoVariable:
         pass.WriteVariable(GotoVariable{inst.Arg(0).U32()}, block, inst.Arg(1));
         break;
+    case IR::Opcode::SetInterstageAttributeOut:
+        pass.WriteVariable(InterstageAttributeOut{inst.Arg(0).U32()}, block, inst.Arg(1));
+        break;
     case IR::Opcode::SetExec:
         pass.WriteVariable(ExecFlagTag{}, block, inst.Arg(0));
         break;
@@ -383,6 +405,11 @@ void VisitInst(Pass& pass, IR::Block* block, IR::Inst& inst) {
     }
     case IR::Opcode::GetGotoVariable:
         inst.ReplaceUsesWith(pass.ReadVariable(GotoVariable{inst.Arg(0).U32()}, block));
+        break;
+    case IR::Opcode::GetInterstageAttributeOut:
+        inst.ReplaceUsesWith(
+            pass.ReadVariable(InterstageAttributeOut{inst.Arg(0).U32()},
+                              block)); /* TODO need to incorporate VADDR and soffset*/
         break;
     case IR::Opcode::GetExec:
         inst.ReplaceUsesWith(pass.ReadVariable(ExecFlagTag{}, block));

@@ -269,6 +269,19 @@ void IREmitter::SetAttribute(IR::Attribute attribute, const F32& value, u32 comp
     Inst(Opcode::SetAttribute, attribute, value, Imm32(comp));
 }
 
+U32 IREmitter::GetInterstageAttributeIn(const IR::U32& vaddr, const IR::U32& soffset) {
+    return Inst<U32>(Opcode::GetInterstageAttributeIn, vaddr, soffset);
+}
+
+U32 IREmitter::GetInterstageAttributeOut(const IR::U32& vaddr, const IR::U32& soffset) {
+    return Inst<U32>(Opcode::GetInterstageAttributeOut, vaddr, soffset);
+}
+
+void IREmitter::SetInterstageAttributeOut(const IR::U32& vaddr, const IR::U32& soffset,
+                                          const U32& value) {
+    Inst(Opcode::SetInterstageAttributeOut, vaddr, soffset, value);
+}
+
 Value IREmitter::LoadShared(int bit_size, bool is_signed, const U32& offset) {
     switch (bit_size) {
     case 32:
@@ -326,18 +339,33 @@ U32 IREmitter::ReadConstBuffer(const Value& handle, const U32& index) {
 }
 
 Value IREmitter::LoadBuffer(int num_dwords, const Value& handle, const Value& address,
-                            BufferInstInfo info) {
+                            BufferInstInfo info, const Value& soffset) {
+
+    Opcode op;
+    bool has_soff = !(soffset.IsImmediate() && soffset.U32() == 0);
+
     switch (num_dwords) {
     case 1:
-        return Inst(Opcode::LoadBufferU32, Flags{info}, handle, address);
+        op = has_soff ? Opcode::LoadBufferWithOffU32 : Opcode::LoadBufferU32;
+        break;
     case 2:
-        return Inst(Opcode::LoadBufferU32x2, Flags{info}, handle, address);
+        op = Opcode::LoadBufferU32x2;
+        break;
     case 3:
-        return Inst(Opcode::LoadBufferU32x3, Flags{info}, handle, address);
+        op = Opcode::LoadBufferU32x3;
+        break;
     case 4:
-        return Inst(Opcode::LoadBufferU32x4, Flags{info}, handle, address);
+        op = Opcode::LoadBufferU32x4;
+        break;
     default:
         UNREACHABLE_MSG("Invalid number of dwords {}", num_dwords);
+    }
+
+    if (has_soff) {
+        ASSERT(num_dwords == 1);
+        return Inst(op, Flags{info}, handle, address, soffset);
+    } else {
+        return Inst(op, Flags{info}, handle, address);
     }
 }
 
@@ -346,22 +374,32 @@ Value IREmitter::LoadBufferFormat(const Value& handle, const Value& address, Buf
 }
 
 void IREmitter::StoreBuffer(int num_dwords, const Value& handle, const Value& address,
-                            const Value& data, BufferInstInfo info) {
+                            const Value& data, BufferInstInfo info, const Value& soffset) {
+    Opcode op;
+    bool has_soff = !(soffset.IsImmediate() && soffset.U32() == 0);
+
     switch (num_dwords) {
     case 1:
-        Inst(Opcode::StoreBufferU32, Flags{info}, handle, address, data);
+        op = op = has_soff ? Opcode::StoreBufferWithOffU32 : Opcode::StoreBufferU32;
         break;
     case 2:
-        Inst(Opcode::StoreBufferU32x2, Flags{info}, handle, address, data);
+        op = Opcode::StoreBufferU32x2;
         break;
     case 3:
-        Inst(Opcode::StoreBufferU32x3, Flags{info}, handle, address, data);
+        op = Opcode::StoreBufferU32x3;
         break;
     case 4:
-        Inst(Opcode::StoreBufferU32x4, Flags{info}, handle, address, data);
+        op = Opcode::StoreBufferU32x4;
         break;
     default:
         UNREACHABLE_MSG("Invalid number of dwords {}", num_dwords);
+    }
+
+    if (has_soff) {
+        ASSERT(num_dwords == 1);
+        Inst(op, Flags{info}, handle, address, data, soffset);
+    } else {
+        Inst(op, Flags{info}, handle, address, data);
     }
 }
 

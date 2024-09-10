@@ -8,20 +8,10 @@
 
 #include "common/assert.h"
 #include "common/types.h"
+#include "shader_recompiler/shader_stages.h"
 #include "video_core/amdgpu/liverpool.h"
 
 namespace Shader {
-
-enum class Stage : u32 {
-    Fragment,
-    Vertex,
-    Geometry,
-    Export,
-    Hull,
-    Local,
-    Compute,
-};
-constexpr u32 MaxStageTypes = 6;
 
 [[nodiscard]] constexpr Stage StageFromIndex(size_t index) noexcept {
     return static_cast<Stage>(index);
@@ -61,6 +51,7 @@ enum class VsOutput : u8 {
     ClipDist7,
 };
 using VsOutputMap = std::array<VsOutput, 4>;
+using GsOutputMap = std::array<VsOutput, 4>;
 
 struct VertexRuntimeInfo {
     boost::container::static_vector<VsOutputMap, 3> outputs;
@@ -106,8 +97,24 @@ class Program;
 
 struct GeometryRuntimeInfo {
     AmdGpu::Liverpool::GsPrimType gs_out_prim_type;
+    AmdGpu::Liverpool::GsMode gs_mode;
     AmdGpu::Liverpool::GsCutMode gs_cut_mode;
+    // TODO check for instancing
+    // TODO check ring sizes
+    // can we be more exact about components and offsets in each stage if we inspect the registers
+    // closer? Or just use heuristic (offsets written by previous stage correspond to offsets read
+    // by next stage in ascending order)? What if some attributes unused by next stage, or not
+    // written by previous stage
     IR::Program* gs_copy_shader;
+
+    bool operator==(const GeometryRuntimeInfo& other) const noexcept {
+        return gs_out_prim_type == other.gs_out_prim_type && gs_mode == other.gs_mode &&
+               gs_cut_mode == other.gs_cut_mode && gs_copy_shader == other.gs_copy_shader;
+    }
+};
+
+struct GSCopyRuntimeInfo {
+    u32 dummy;
 };
 
 /**
@@ -120,10 +127,12 @@ struct RuntimeInfo {
     u32 num_user_data;
     u32 num_input_vgprs;
     u32 num_allocated_vgprs;
+    SWStage software_stage; // TODO probably move to just Info
     VertexRuntimeInfo vs_info;
     FragmentRuntimeInfo fs_info;
     ComputeRuntimeInfo cs_info;
     GeometryRuntimeInfo gs_info;
+    bool geom_enabled{false}; // TODO delete
 
     RuntimeInfo(Stage stage_) : stage{stage_} {}
 
@@ -135,9 +144,18 @@ struct RuntimeInfo {
             return vs_info == other.vs_info;
         case Stage::Compute:
             return cs_info == other.cs_info;
+        case Stage::Geometry:
+            return gs_info == other.gs_info;
+            return false;
         default:
             return true;
         }
+    }
+
+    // TODO delete
+    bool isGeometryRelated() const {
+        return geom_enabled && (stage == Shader::Stage::Geometry ||
+                                stage == Shader::Stage::Export || stage == Shader::Stage::Vertex);
     }
 };
 

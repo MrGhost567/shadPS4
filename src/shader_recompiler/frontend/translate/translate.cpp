@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include "common/assert.h"
 #include "common/config.h"
 #include "common/io_file.h"
 #include "common/path_util.h"
@@ -8,6 +9,7 @@
 #include "shader_recompiler/frontend/fetch_shader.h"
 #include "shader_recompiler/frontend/translate/translate.h"
 #include "shader_recompiler/info.h"
+#include "shader_recompiler/ir/reg.h"
 #include "shader_recompiler/runtime_info.h"
 #include "video_core/amdgpu/resource.h"
 
@@ -36,19 +38,45 @@ void Translator::EmitPrologue() {
     switch (info.stage) {
     case Stage::Export:
     case Stage::Vertex:
-        // v0: vertex ID, always present
-        ir.SetVectorReg(dst_vreg++, ir.GetAttributeU32(IR::Attribute::VertexId));
-        // v1: instance ID, step rate 0
-        if (runtime_info.num_input_vgprs > 0) {
-            ir.SetVectorReg(dst_vreg++, ir.GetAttributeU32(IR::Attribute::InstanceId0));
-        }
-        // v2: instance ID, step rate 1
-        if (runtime_info.num_input_vgprs > 1) {
-            ir.SetVectorReg(dst_vreg++, ir.GetAttributeU32(IR::Attribute::InstanceId1));
-        }
-        // v3: instance ID, plain
-        if (runtime_info.num_input_vgprs > 2) {
-            ir.SetVectorReg(dst_vreg++, ir.GetAttributeU32(IR::Attribute::InstanceId));
+        if (runtime_info.geom_enabled) {
+            // CopyGS shader
+            // Set a dummy value just for pattern matching purposes with memory ops reading from
+            // interstage attribute buffer. Is it well defined to use vertex id after merging with
+            // GS?
+            ir.SetVectorReg(IR::VectorReg::V0, ir.GetAttributeU32(IR::Attribute::VertexIdGsCopy));
+
+            // TODO: SGPR[0:3] seems to be buffer resource to read GS attributes from
+            // Laid out in structure of arrays per attribute
+            // GSOutputs {
+            //    uint pos0[NUM_VERTICES];
+            //    uint pos1[NUM_VERTICES];
+            //    ...
+            //    uint param0.x[NUM_VERTICES];
+            //    ...
+            //    uint paramN.z[NUM_VERTICES]
+            // }
+            // For some reason, GS and GSCopy use different strides for the array lengths
+            // For example, seen offsets go up in increments of 768 in GSCopy, and
+            // 48 for GS per attribute array.
+            // Virtual memory fuckery happening?
+            // 48 consistent with 12 vertex limit in that shader, 4 attrs (POS.xyzw)
+            //
+            // VCC_LO seems to old offset to the array last attribute's last component
+        } else {
+            // v0: vertex ID, always present
+            ir.SetVectorReg(dst_vreg++, ir.GetAttributeU32(IR::Attribute::VertexId));
+            // v1: instance ID, step rate 0
+            if (runtime_info.num_input_vgprs > 0) {
+                ir.SetVectorReg(dst_vreg++, ir.GetAttributeU32(IR::Attribute::InstanceId0));
+            }
+            // v2: instance ID, step rate 1
+            if (runtime_info.num_input_vgprs > 1) {
+                ir.SetVectorReg(dst_vreg++, ir.GetAttributeU32(IR::Attribute::InstanceId1));
+            }
+            // v3: instance ID, plain
+            if (runtime_info.num_input_vgprs > 2) {
+                ir.SetVectorReg(dst_vreg++, ir.GetAttributeU32(IR::Attribute::InstanceId));
+            }
         }
         break;
     case Stage::Fragment:
@@ -80,6 +108,12 @@ void Translator::EmitPrologue() {
     case Stage::Geometry:
         dst_vreg = IR::VectorReg::V2;
         ir.SetVectorReg(dst_vreg, ir.GetAttributeU32(IR::Attribute::PrimitiveId));
+
+        // TODO shouldnt assume triangles here
+        ir.SetVectorReg(IR::VectorReg::V1, ir.GetAttributeU32(IR::Attribute::GsVertexIdA));
+        ir.SetVectorReg(IR::VectorReg::V2, ir.GetAttributeU32(IR::Attribute::GsVertexIdB));
+        ir.SetVectorReg(IR::VectorReg::V3, ir.GetAttributeU32(IR::Attribute::GsVertexIdC));
+        // TODO: s2 seems to hold something important for addressing the Interstage attribute buffer
         break;
     default:
         throw NotImplementedException("Unknown shader stage");

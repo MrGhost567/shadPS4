@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include "common/assert.h"
 #include "shader_recompiler/frontend/translate/translate.h"
 
 namespace Shader::Gcn {
@@ -363,7 +364,8 @@ void Translator::BUFFER_LOAD(u32 num_dwords, bool is_typed, const GcnInst& inst)
         return {};
     }();
     const IR::Value soffset{GetSrc(inst.src[3])};
-    ASSERT_MSG(soffset.IsImmediate() && soffset.U32() == 0, "Non immediate offset not supported");
+    ASSERT_MSG(runtime_info.isGeometryRelated() || (soffset.IsImmediate() && soffset.U32() == 0),
+               "Non immediate offset not supported");
 
     IR::BufferInstInfo info{};
     info.index_enable.Assign(mtbuf.idxen);
@@ -381,7 +383,7 @@ void Translator::BUFFER_LOAD(u32 num_dwords, bool is_typed, const GcnInst& inst)
     const IR::Value handle =
         ir.CompositeConstruct(ir.GetScalarReg(sharp), ir.GetScalarReg(sharp + 1),
                               ir.GetScalarReg(sharp + 2), ir.GetScalarReg(sharp + 3));
-    const IR::Value value = ir.LoadBuffer(num_dwords, handle, address, info);
+    const IR::Value value = ir.LoadBuffer(num_dwords, handle, address, info, soffset);
     const IR::VectorReg dst_reg{inst.src[1].code};
     if (num_dwords == 1) {
         ir.SetVectorReg(dst_reg, IR::U32{value});
@@ -433,7 +435,8 @@ void Translator::BUFFER_STORE(u32 num_dwords, bool is_typed, const GcnInst& inst
         return {};
     }();
     const IR::Value soffset{GetSrc(inst.src[3])};
-    ASSERT_MSG(soffset.IsImmediate() && soffset.U32() == 0, "Non immediate offset not supported");
+    ASSERT_MSG(runtime_info.isGeometryRelated() || (soffset.IsImmediate() && soffset.U32() == 0),
+               "Non immediate offset not supported");
 
     IR::BufferInstInfo info{};
     info.index_enable.Assign(mtbuf.idxen);
@@ -469,7 +472,7 @@ void Translator::BUFFER_STORE(u32 num_dwords, bool is_typed, const GcnInst& inst
     const IR::Value handle =
         ir.CompositeConstruct(ir.GetScalarReg(sharp), ir.GetScalarReg(sharp + 1),
                               ir.GetScalarReg(sharp + 2), ir.GetScalarReg(sharp + 3));
-    ir.StoreBuffer(num_dwords, handle, address, value, info);
+    ir.StoreBuffer(num_dwords, handle, address, value, info, soffset);
 }
 
 void Translator::BUFFER_STORE_FORMAT(u32 num_dwords, const GcnInst& inst) {

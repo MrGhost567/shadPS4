@@ -3,11 +3,13 @@
 
 #pragma once
 
+#include <cstddef>
 #include <span>
 #include "shader_recompiler/frontend/instruction.h"
 #include "shader_recompiler/info.h"
 #include "shader_recompiler/ir/basic_block.h"
 #include "shader_recompiler/ir/ir_emitter.h"
+#include "shader_recompiler/ir/reg.h"
 
 namespace Shader {
 struct Info;
@@ -250,6 +252,13 @@ private:
     const RuntimeInfo& runtime_info;
     const Profile& profile;
     bool opcode_missing = false;
+    // TODO hack for now to pattern match BUFFER_LOAD/STORE in gs related stages
+    IR::ScalarReg prev_interstage_sharp = IR::ScalarReg::Max;
+    IR::ScalarReg next_interstage_sharp = IR::ScalarReg::Max;
+};
+
+class GsTranslator : public Translator {
+    // TODO maybe
 };
 
 void Translate(IR::Block* block, u32 block_base, std::span<const GcnInst> inst_list, Info& info,
