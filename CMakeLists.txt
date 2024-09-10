@@ -341,6 +341,7 @@ set(COMMON src/common/logging/backend.cpp
            src/common/concepts.h
            src/common/config.cpp
            src/common/config.h
+           src/common/cstring.h
            src/common/debug.h
            src/common/disassembler.cpp
            src/common/disassembler.h
