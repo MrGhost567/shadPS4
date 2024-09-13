@@ -2457,8 +2457,10 @@ s32 PS4_SYSV_ABI sceGnmSubmitCommandBuffers(u32 count, const u32* dcb_gpu_addrs[
 
         static auto last_frame_num = -1LL;
         static u32 seq_num{};
-        if (last_frame_num == frames_submitted && cbpair == 0) {
-            ++seq_num;
+        if (last_frame_num == frames_submitted) {
+            if (cbpair == 0) {
+                ++seq_num;
+            }
         } else {
             last_frame_num = frames_submitted;
             seq_num = 0u;
