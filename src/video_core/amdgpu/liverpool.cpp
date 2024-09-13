@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <mutex>
 #include "common/assert.h"
 #include "common/config.h"
 #include "common/debug.h"
@@ -89,6 +90,7 @@ void Liverpool::Process(std::stop_token stoken) {
                 }
                 task = queue.submits.front();
             }
+            // num_submits == 34, look for co_yield or smthn
             task.resume();
 
             if (task.done()) {
@@ -125,6 +127,7 @@ Liverpool::Task Liverpool::ProcessCeUpdate(std::span<const u32> ccb) {
         if (type != 3) {
             // No other types of packets were spotted so far
             UNREACHABLE_MSG("Invalid PM4 type {}", type);
+            break;
         }
 
         const PM4ItOpcode opcode = header->type3.opcode;
@@ -170,8 +173,11 @@ Liverpool::Task Liverpool::ProcessCeUpdate(std::span<const u32> ccb) {
     TracyFiberLeave;
 }
 
-Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<const u32> ccb) {
+Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<const u32> ccb,
+                                           SequenceNum seqnum) {
     TracyFiberEnter(dcb_task_name);
+
+    LOG_DEBUG(Lib_GnmDriver, "acb {}, ccb {}, {}", acb, ccb, SubmitId{QueueType::dcb, seqnum});
 
     cblock.Reset();
 
@@ -467,7 +473,7 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
             case PM4ItOpcode::EventWriteEos: {
                 const auto* event_eos = reinterpret_cast<const PM4CmdEventWriteEos*>(header);
                 event_eos->SignalFence();
-                if (event_eos->command == PM4CmdEventWriteEos::Command::GdsStore) {
+                if (event_eos->command.Value() == PM4CmdEventWriteEos::Command::GdsStore) {
                     ASSERT(event_eos->size == 1);
                     if (rasterizer) {
                         rasterizer->Finish();
@@ -560,15 +566,19 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
     TracyFiberLeave;
 }
 
-Liverpool::Task Liverpool::ProcessCompute(std::span<const u32> acb, int vqid) {
+Liverpool::Task Liverpool::ProcessCompute(std::span<const u32> acb, int vqid, SequenceNum seqnum) {
     TracyFiberEnter(acb_task_name);
+
+    LOG_DEBUG(Lib_GnmDriver, "vqid {}, acb {}, {}", vqid, acb, SubmitId{QueueType::acb, seqnum});
 
     while (!acb.empty()) {
         const auto* header = reinterpret_cast<const PM4Header*>(acb.data());
         const u32 type = header->type;
         if (type != 3) {
             // No other types of packets were spotted so far
-            UNREACHABLE_MSG("Invalid PM4 type {}", type);
+            // UNREACHABLE_MSG("Invalid PM4 type {}", type);
+            LOG_ERROR(Lib_GnmDriver, "Invalid PM4 type {}", type);
+            break;
         }
 
         const u32 count = header->type3.NumWords();
@@ -582,7 +592,7 @@ Liverpool::Task Liverpool::ProcessCompute(std::span<const u32> acb, int vqid) {
         case PM4ItOpcode::IndirectBuffer: {
             const auto* indirect_buffer = reinterpret_cast<const PM4CmdIndirectBuffer*>(header);
             auto task = ProcessCompute(
-                {indirect_buffer->Address<const u32>(), indirect_buffer->ib_size}, vqid);
+                {indirect_buffer->Address<const u32>(), indirect_buffer->ib_size}, vqid, seqnum);
             while (!task.handle.done()) {
                 task.handle.resume();
 
@@ -690,14 +700,36 @@ std::pair<std::span<const u32>, std::span<const u32>> Liverpool::CopyCmdBuffers(
     return std::make_pair(dcb, ccb);
 }
 
-void Liverpool::SubmitGfx(std::span<const u32> dcb, std::span<const u32> ccb) {
+std::span<const u32> Liverpool::CopyComputeCmdBuffer(u32 vqid, std::span<const u32> acb) {
+    auto& queue = mapped_queues[vqid];
+
+    ASSERT_MSG(queue.acb_buffer.capacity() >= queue.acb_buffer_offset + acb.size(),
+               "acb copy buffer out of reserved space");
+
+    queue.acb_buffer.resize(
+        std::max(queue.acb_buffer.size(), queue.acb_buffer_offset + acb.size()));
+
+    u32 prev_acb_buffer_offset = queue.acb_buffer_offset;
+    if (!acb.empty()) {
+        std::memcpy(queue.acb_buffer.data() + queue.acb_buffer_offset, acb.data(),
+                    acb.size_bytes());
+        queue.acb_buffer_offset += acb.size();
+        acb = std::span<const u32>{queue.acb_buffer.begin() + prev_acb_buffer_offset,
+                                   queue.acb_buffer.begin() + queue.acb_buffer_offset};
+    }
+
+    return acb;
+}
+
+void Liverpool::SubmitGfx(std::span<const u32> dcb, std::span<const u32> ccb, SequenceNum seqnum) {
     auto& queue = mapped_queues[GfxQueueId];
+    LOG_DEBUG(Lib_GnmDriver, "gfx queue {}, {}", queue, SubmitId{QueueType::dcb, seqnum});
 
     if (Config::copyGPUCmdBuffers()) {
         std::tie(dcb, ccb) = CopyCmdBuffers(dcb, ccb);
     }
 
-    auto task = ProcessGraphics(dcb, ccb);
+    auto task = ProcessGraphics(dcb, ccb, seqnum);
     {
         std::scoped_lock lock{queue.m_access};
         queue.submits.emplace(task.handle);
@@ -708,11 +740,19 @@ void Liverpool::SubmitGfx(std::span<const u32> dcb, std::span<const u32> ccb) {
     submit_cv.notify_one();
 }
 
-void Liverpool::SubmitAsc(u32 vqid, std::span<const u32> acb) {
+void Liverpool::SubmitAsc(u32 vqid, std::span<const u32> acb, SequenceNum seqnum) {
     ASSERT_MSG(vqid >= 0 && vqid < NumTotalQueues, "Invalid virtual ASC queue index");
-    auto& queue = mapped_queues[vqid];
 
-    const auto& task = ProcessCompute(acb, vqid);
+    // shouldnt mapped_queues use index vqid + 1 (physical?)
+    auto& queue = mapped_queues[vqid];
+    LOG_DEBUG(Lib_GnmDriver, "vqid {}, acb {}, queue {}, {}", vqid, acb, queue,
+              SubmitId{QueueType::acb, seqnum});
+
+    if (Config::copyGPUCmdBuffers()) {
+        acb = CopyComputeCmdBuffer(vqid, acb);
+    }
+
+    const auto& task = ProcessCompute(acb, vqid, seqnum);
     {
         std::scoped_lock lock{queue.m_access};
         queue.submits.emplace(task.handle);
