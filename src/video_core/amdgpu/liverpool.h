@@ -1075,10 +1075,12 @@ public:
     void SubmitAsc(u32 vqid, std::span<const u32> acb, SequenceNum seqnum);
 
     void SubmitDone() noexcept {
-        std::scoped_lock lk{submit_mutex};
-        mapped_queues[GfxQueueId].ccb_buffer_offset = 0;
-        mapped_queues[GfxQueueId].dcb_buffer_offset = 0;
-        submit_done = true;
+        {
+            std::scoped_lock lk{submit_mutex};
+            mapped_queues[GfxQueueId].ccb_buffer_offset = 0;
+            mapped_queues[GfxQueueId].dcb_buffer_offset = 0;
+            submit_done = true;
+        }
         submit_cv.notify_one();
     }
 
@@ -1100,9 +1102,11 @@ public:
     }
 
     void SendCommand(Common::UniqueFunction<void>&& func) {
-        std::scoped_lock lk{submit_mutex};
-        command_queue.emplace(std::move(func));
-        ++num_commands;
+        {
+            std::scoped_lock lk{submit_mutex};
+            command_queue.emplace(std::move(func));
+            ++num_commands;
+        }
         submit_cv.notify_one();
     }
 
