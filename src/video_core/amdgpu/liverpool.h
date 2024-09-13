@@ -1315,7 +1315,6 @@ struct fmt::formatter<std::span<const u32>> {
         return ctx.begin();
     }
     auto format(std::span<const u32> span, format_context& ctx) const {
-        return fmt::format_to(ctx.out(), "[{:#x}, {:#x})", (u64)span.data(),
-                              (u64)span.data() + span.size_bytes());
+        return fmt::format_to(ctx.out(), "[{:#x}, +{})", (u64)span.data(), span.size_bytes());
     }
 };

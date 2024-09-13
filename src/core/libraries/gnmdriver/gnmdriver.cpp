@@ -852,8 +852,8 @@ void PS4_SYSV_ABI sceGnmDingDong(u32 gnm_vqid, u32 next_offs_dw) {
         DumpCommandList(acb, fmt::format("acb_{}_{}", gnm_vqid, seq_num));
     }
 
-    LOG_DEBUG(Lib_GnmDriver, "vqid {}, next_offset_dw {}, acb {}, asc queue {}, seq num {}",
-              gnm_vqid, next_offs_dw, acb_span, asc_queue,
+    LOG_DEBUG(Lib_GnmDriver, "vqid {}, next_offset_dw {}, acb {}, asc queue {}, seq num {}", vqid,
+              next_offs_dw, acb_span, asc_queue,
               AmdGpu::Liverpool::SubmitId{AmdGpu::Liverpool::QueueType::acb, sSeqNum});
 
     liverpool->SubmitAsc(vqid, acb_span, sSeqNum);
