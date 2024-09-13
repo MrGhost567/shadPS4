@@ -57,6 +57,24 @@ struct Liverpool {
     static constexpr u32 ShRegWordOffset = 0x2C00;
     static constexpr u32 NumRegs = 0xD000;
 
+#if 1
+    enum QueueType { acb, dcb, ccb };
+
+    struct SequenceNum {
+        u64 frames_submitted;
+        u32 seq0;
+        u32 seq1;
+
+        SequenceNum(u64 frames_submitted_, u32 seq_0_, u32 seq_1_)
+            : frames_submitted(frames_submitted_), seq0(seq_0_), seq1(seq_1_) {}
+    };
+
+    struct SubmitId {
+        QueueType qtype;
+        SequenceNum seqnum;
+    };
+#endif
+
     using UserData = std::array<u32, NumShaderUserData>;
 
     struct BinaryInfo {
@@ -1053,8 +1071,8 @@ public:
     Liverpool();
     ~Liverpool();
 
-    void SubmitGfx(std::span<const u32> dcb, std::span<const u32> ccb);
-    void SubmitAsc(u32 vqid, std::span<const u32> acb);
+    void SubmitGfx(std::span<const u32> dcb, std::span<const u32> ccb, SequenceNum seqnum);
+    void SubmitAsc(u32 vqid, std::span<const u32> acb, SequenceNum seqnum);
 
     void SubmitDone() noexcept {
         std::scoped_lock lk{submit_mutex};
@@ -1132,24 +1150,29 @@ private:
 
     std::pair<std::span<const u32>, std::span<const u32>> CopyCmdBuffers(std::span<const u32> dcb,
                                                                          std::span<const u32> ccb);
-    Task ProcessGraphics(std::span<const u32> dcb, std::span<const u32> ccb);
+    std::span<const u32> CopyComputeCmdBuffer(u32 vqid, std::span<const u32> acb);
+    Task ProcessGraphics(std::span<const u32> dcb, std::span<const u32> ccb, SequenceNum seq);
     Task ProcessCeUpdate(std::span<const u32> ccb);
-    Task ProcessCompute(std::span<const u32> acb, int vqid);
+    Task ProcessCompute(std::span<const u32> acb, int vqid, SequenceNum seq);
 
     void Process(std::stop_token stoken);
 
+public:
     struct GpuQueue {
         std::mutex m_access{};
         std::atomic<u32> dcb_buffer_offset;
         std::atomic<u32> ccb_buffer_offset;
+        std::atomic<u32> acb_buffer_offset;
         std::vector<u32> dcb_buffer;
         std::vector<u32> ccb_buffer;
+        std::vector<u32> acb_buffer;
         std::queue<Task::Handle> submits{};
         ComputeProgram cs_state{};
         VAddr indirect_args_addr{};
     };
     std::array<GpuQueue, NumTotalQueues> mapped_queues{};
 
+private:
     struct ConstantEngine {
         void Reset() {
             ce_count = 0;
@@ -1236,3 +1259,49 @@ static_assert(GFX6_3D_REG_INDEX(num_instances) == 0xC24D);
 #undef GFX6_3D_REG_INDEX
 
 } // namespace AmdGpu
+
+template <>
+struct fmt::formatter<AmdGpu::Liverpool::GpuQueue> {
+    constexpr auto parse(format_parse_context& ctx) {
+        return ctx.begin();
+    }
+    auto format(const AmdGpu::Liverpool::GpuQueue& queue, format_context& ctx) const {
+        return fmt::format_to(ctx.out(), "(dcb_off={}, ccb_off={}, acb_off={}, submits_size={})",
+                              (u32)queue.dcb_buffer_offset.load(),
+                              (u32)queue.ccb_buffer_offset.load(),
+                              (u32)queue.acb_buffer_offset.load(), queue.submits.size());
+    }
+};
+
+template <>
+struct fmt::formatter<AmdGpu::Liverpool::QueueType> {
+    constexpr auto parse(format_parse_context& ctx) {
+        return ctx.begin();
+    }
+    auto format(AmdGpu::Liverpool::QueueType qtype, format_context& ctx) const {
+        constexpr static std::array names = {"acb", "dcb", "ccb"};
+        return fmt::format_to(ctx.out(), "{}", names[static_cast<size_t>(qtype)]);
+    }
+};
+
+template <>
+struct fmt::formatter<AmdGpu::Liverpool::SubmitId> {
+    constexpr auto parse(format_parse_context& ctx) {
+        return ctx.begin();
+    }
+    auto format(const AmdGpu::Liverpool::SubmitId& id, format_context& ctx) const {
+        return fmt::format_to(ctx.out(), "{:08}_{}_{}_{}", id.seqnum.frames_submitted, id.qtype,
+                              id.seqnum.seq0, id.seqnum.seq1);
+    }
+};
+
+template <>
+struct fmt::formatter<std::span<const u32>> {
+    constexpr auto parse(format_parse_context& ctx) {
+        return ctx.begin();
+    }
+    auto format(std::span<const u32> span, format_context& ctx) const {
+        return fmt::format_to(ctx.out(), "[{:#x}, {:#x})", (u64)span.data(),
+                              (u64)span.data() + span.size_bytes());
+    }
+};

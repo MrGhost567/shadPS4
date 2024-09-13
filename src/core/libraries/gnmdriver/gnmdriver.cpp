@@ -323,6 +323,20 @@ static void WaitGpuIdle() {
     cv_lock.wait(lock, [] { return submission_lock == 0; });
 }
 
+static std::span<const u32> NextPacket(std::span<const u32> span, size_t offset) {
+    if (offset > span.size()) {
+        LOG_ERROR(
+            Lib_GnmDriver,
+            ": packet length exceeds remaining submission size. Packet dword count={}, remaining "
+            "submission dwords={}",
+            offset, span.size());
+        // Return empty subspan so check for next packet bails out
+        return {};
+    }
+
+    return span.subspan(offset);
+}
+
 static std::string DisassemblePM4(std::span<const u32> cmds) {
     std::string ret = "";
 
@@ -348,13 +362,13 @@ static std::string DisassemblePM4(std::span<const u32> cmds) {
                                header->type0.count.Value()));
             for (size_t i = 0; i < header->type0.count.Value(); i++)
                 append(fmt::format("- 0x{:08X}\n", cmds.data()[1 + i]));
-            cmds = cmds.subspan(header->type0.NumWords() + 1);
+            cmds = NextPacket(cmds, header->type0.NumWords() + 1);
             break;
         case 1:
             UNREACHABLE();
         case 2:
             append(fmt::format("PM4Type2:\n"));
-            cmds = cmds.subspan(1);
+            cmds = NextPacket(cmds, 1);
             break;
         case 3:
             append(fmt::format(
@@ -603,7 +617,7 @@ static std::string DisassemblePM4(std::span<const u32> cmds) {
                 break;
             }
 
-            cmds = cmds.subspan(header->type3.NumWords() + 1);
+            cmds = NextPacket(cmds, header->type3.NumWords() + 1);
             break;
         default:
             UNREACHABLE();
@@ -795,7 +809,7 @@ int PS4_SYSV_ABI sceGnmDestroyWorkloadStream() {
 }
 
 void PS4_SYSV_ABI sceGnmDingDong(u32 gnm_vqid, u32 next_offs_dw) {
-    LOG_DEBUG(Lib_GnmDriver, "vqid {}, offset_dw {}", gnm_vqid, next_offs_dw);
+    // LOG_DEBUG(Lib_GnmDriver, "vqid {}, offset_dw {}", gnm_vqid, next_offs_dw);
 
     if (gnm_vqid == 0) {
         return;
@@ -812,16 +826,18 @@ void PS4_SYSV_ABI sceGnmDingDong(u32 gnm_vqid, u32 next_offs_dw) {
                                        : (asc_queue.ring_size_dw << 2u) - *asc_queue.read_addr;
     const std::span<const u32> acb_span{acb_ptr, acb_size >> 2u};
 
-    if (Config::dumpPM4()) {
-        static auto last_frame_num = -1LL;
-        static u32 seq_num{};
-        if (last_frame_num == frames_submitted) {
-            ++seq_num;
-        } else {
-            last_frame_num = frames_submitted;
-            seq_num = 0u;
-        }
+    static auto last_frame_num = -1LL;
+    static u32 seq_num{};
+    if (last_frame_num == frames_submitted) {
+        ++seq_num;
+    } else {
+        last_frame_num = frames_submitted;
+        seq_num = 0u;
+    }
 
+    AmdGpu::Liverpool::SequenceNum sSeqNum(last_frame_num, gnm_vqid, seq_num);
+
+    if (Config::dumpPM4()) {
         // Up to this point, all ACB submissions have been stored in a secondary command buffer.
         // Dumping them using the current ring pointer would result in files containing only the
         // `IndirectBuffer` command. To access the actual command stream, we need to unwrap the IB.
@@ -836,8 +852,17 @@ void PS4_SYSV_ABI sceGnmDingDong(u32 gnm_vqid, u32 next_offs_dw) {
         DumpCommandList(acb, fmt::format("acb_{}_{}", gnm_vqid, seq_num));
     }
 
-    liverpool->SubmitAsc(vqid, acb_span);
+    LOG_DEBUG(Lib_GnmDriver, "vqid {}, next_offset_dw {}, acb {}, asc queue {}, seq num {}",
+              gnm_vqid, next_offs_dw, acb_span, asc_queue,
+              AmdGpu::Liverpool::SubmitId{AmdGpu::Liverpool::QueueType::acb, sSeqNum});
 
+    liverpool->SubmitAsc(vqid, acb_span, sSeqNum);
+
+    if (*asc_queue.read_addr / (asc_queue.ring_size_dw * 4) !=
+        (*asc_queue.read_addr + acb_size) / (asc_queue.ring_size_dw * 4)) {
+        LOG_DEBUG(Lib_GnmDriver, "ring buffer wrapping around, seq num {}",
+                  AmdGpu::Liverpool::SubmitId{AmdGpu::Liverpool::QueueType::acb, sSeqNum});
+    }
     *asc_queue.read_addr += acb_size;
     *asc_queue.read_addr %= asc_queue.ring_size_dw * 4;
 }
@@ -2404,11 +2429,14 @@ s32 PS4_SYSV_ABI sceGnmSubmitCommandBuffers(u32 count, const u32* dcb_gpu_addrs[
 
     if (send_init_packet) {
         if (sdk_version <= 0x1ffffffu) {
-            liverpool->SubmitGfx(InitSequence, {});
+            liverpool->SubmitGfx(InitSequence, {},
+                                 AmdGpu::Liverpool::SequenceNum(77777777, 77777777, 77777777));
         } else if (sdk_version <= 0x3ffffffu) {
-            liverpool->SubmitGfx(InitSequence200, {});
+            liverpool->SubmitGfx(InitSequence200, {},
+                                 AmdGpu::Liverpool::SequenceNum(77777777, 77777777, 77777777));
         } else {
-            liverpool->SubmitGfx(InitSequence350, {});
+            liverpool->SubmitGfx(InitSequence350, {},
+                                 AmdGpu::Liverpool::SequenceNum(77777777, 77777777, 77777777));
         }
         send_init_packet = false;
     }
@@ -2423,22 +2451,23 @@ s32 PS4_SYSV_ABI sceGnmSubmitCommandBuffers(u32 count, const u32* dcb_gpu_addrs[
         const auto& dcb_span = std::span<const u32>{dcb_gpu_addrs[cbpair], dcb_size_dw};
         const auto& ccb_span = std::span<const u32>{ccb, ccb_size_dw};
 
-        if (Config::dumpPM4()) {
-            static auto last_frame_num = -1LL;
-            static u32 seq_num{};
-            if (last_frame_num == frames_submitted && cbpair == 0) {
-                ++seq_num;
-            } else {
-                last_frame_num = frames_submitted;
-                seq_num = 0u;
-            }
+        static auto last_frame_num = -1LL;
+        static u32 seq_num{};
+        if (last_frame_num == frames_submitted && cbpair == 0) {
+            ++seq_num;
+        } else {
+            last_frame_num = frames_submitted;
+            seq_num = 0u;
+        }
 
+        if (Config::dumpPM4()) {
             // File name format is: <queue>_<submit num>_<buffer_in_submit>
             DumpCommandList(dcb_span, fmt::format("dcb_{}_{}", seq_num, cbpair));
             DumpCommandList(ccb_span, fmt::format("ccb_{}_{}", seq_num, cbpair));
         }
 
-        liverpool->SubmitGfx(dcb_span, ccb_span);
+        liverpool->SubmitGfx(dcb_span, ccb_span,
+                             AmdGpu::Liverpool::SequenceNum(last_frame_num, seq_num, cbpair));
     }
 
     return ORBIS_OK;
@@ -3442,3 +3471,15 @@ void RegisterlibSceGnmDriver(Core::Loader::SymbolsResolver* sym) {
 };
 
 } // namespace Libraries::GnmDriver
+
+template <>
+struct fmt::formatter<Libraries::GnmDriver::AscQueueInfo> {
+    constexpr auto parse(format_parse_context& ctx) {
+        return ctx.begin();
+    }
+    auto format(Libraries::GnmDriver::AscQueueInfo queue, format_context& ctx) const {
+        constexpr static std::array names = {"fs", "vs", "gs", "es", "hs", "ls", "cs"};
+        return fmt::format_to(ctx.out(), "(map_addr={:#x}, read_addr={}, ring_size_dw={})",
+                              queue.map_addr, *queue.read_addr, queue.ring_size_dw);
+    }
+};

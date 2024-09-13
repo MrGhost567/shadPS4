@@ -308,6 +308,10 @@ bool PipelineCache::RefreshGraphicsKey() {
         const auto stage = Shader::StageFromIndex(i);
         const auto params = Liverpool::GetParams(*pgm);
 
+        if (bininfo->is_srt) {
+            LOG_WARNING(Render_Vulkan, "SRT used in {}_{:#x} {}", stage, params.hash);
+        }
+
         if (stage != Shader::Stage::Vertex && stage != Shader::Stage::Fragment) {
             return false;
         }
@@ -330,7 +334,11 @@ bool PipelineCache::RefreshGraphicsKey() {
 bool PipelineCache::RefreshComputeKey() {
     u32 binding{};
     const auto* cs_pgm = &liverpool->regs.cs_program;
+    const auto* bininfo = Liverpool::GetBinaryInfo(*cs_pgm);
     const auto cs_params = Liverpool::GetParams(*cs_pgm);
+    if (bininfo->is_srt) {
+        LOG_WARNING(Render_Vulkan, "SRT used in cs_{:#x} {}", cs_params.hash);
+    }
     if (ShouldSkipShader(cs_params.hash, "compute")) {
         return false;
     }
