@@ -146,8 +146,8 @@ int PS4_SYSV_ABI sceKernelMapNamedDirectMemory(void** addr, u64 len, int prot, i
                                                const char* name) {
     LOG_INFO(Kernel_Vmm,
              "addr = {}, len = {:#x}, prot = {:#x}, flags = {:#x}, directMemoryStart = {:#x}, "
-             "alignment = {:#x}",
-             fmt::ptr(*addr), len, prot, flags, directMemoryStart, alignment);
+             "alignment = {:#x}, name = {}",
+             fmt::ptr(*addr), len, prot, flags, directMemoryStart, alignment, name);
 
     if (len == 0 || !Common::Is16KBAligned(len)) {
         LOG_ERROR(Kernel_Vmm, "Map size is either zero or not 16KB aligned!");
@@ -204,8 +204,8 @@ s32 PS4_SYSV_ABI sceKernelMapNamedFlexibleMemory(void** addr_in_out, std::size_t
     const int ret = memory->MapMemory(addr_in_out, in_addr, len, mem_prot, map_flags,
                                       Core::VMAType::Flexible, name);
 
-    LOG_INFO(Kernel_Vmm, "addr = {}, len = {:#x}, prot = {:#x}, flags = {:#x}",
-             fmt::ptr(*addr_in_out), len, prot, flags);
+    LOG_INFO(Kernel_Vmm, "addr = {}, len = {:#x}, prot = {:#x}, flags = {:#x}, name = {}",
+             fmt::ptr(*addr_in_out), len, prot, flags, name);
     return ret;
 }
 
