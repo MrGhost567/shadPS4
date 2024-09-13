@@ -735,8 +735,10 @@ void Liverpool::SubmitGfx(std::span<const u32> dcb, std::span<const u32> ccb, Se
         queue.submits.emplace(task.handle);
     }
 
-    std::scoped_lock lk{submit_mutex};
-    ++num_submits;
+    {
+        std::scoped_lock lk{submit_mutex};
+        ++num_submits;
+    }
     submit_cv.notify_one();
 }
 
@@ -758,8 +760,10 @@ void Liverpool::SubmitAsc(u32 vqid, std::span<const u32> acb, SequenceNum seqnum
         queue.submits.emplace(task.handle);
     }
 
-    std::scoped_lock lk{submit_mutex};
-    ++num_submits;
+    {
+        std::scoped_lock lk{submit_mutex};
+        ++num_submits;
+    }
     submit_cv.notify_one();
 }
 
