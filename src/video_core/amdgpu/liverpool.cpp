@@ -177,7 +177,7 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
                                            SequenceNum seqnum) {
     TracyFiberEnter(dcb_task_name);
 
-    LOG_DEBUG(Lib_GnmDriver, "acb {}, ccb {}, {}", acb, ccb, SubmitId{QueueType::dcb, seqnum});
+    LOG_DEBUG(Lib_GnmDriver, "dcb {}, ccb {}, {}", dcb, ccb, SubmitId{QueueType::dcb, seqnum});
 
     cblock.Reset();
 

@@ -51,11 +51,23 @@ IR::Program TranslateProgram(std::span<const u32> code, Pools& pools, Info& info
     Common::ObjectPool<Gcn::Block> gcn_block_pool{64};
     Gcn::CFG cfg{gcn_block_pool, program.ins_list};
 
+    bool dump_ir = false;
+    if (info.pgm_hash == 0x229c75fadec08ca5) {
+        dump_ir = true;
+    }
+    auto dumpMatchingIR = [&](std::string msg) {
+        if (dump_ir) {
+            std::string s = IR::DumpProgram(program);
+            LOG_DEBUG(Render_Recompiler, "IR dump before {}:\n {}", msg, s);
+        }
+    };
+
     // Structurize control flow graph and create program.
     program.syntax_list = Shader::Gcn::BuildASL(pools.inst_pool, pools.block_pool, cfg,
                                                 program.info, runtime_info, profile);
     program.blocks = GenerateBlocks(program.syntax_list);
     program.post_order_blocks = Shader::IR::PostOrder(program.syntax_list.front());
+    dumpMatchingIR("after translate");
 
     // Run optimization passes
     Shader::Optimization::SsaRewritePass(program.post_order_blocks);
@@ -63,6 +75,7 @@ IR::Program TranslateProgram(std::span<const u32> code, Pools& pools, Info& info
     if (program.info.stage != Stage::Compute) {
         Shader::Optimization::LowerSharedMemToRegisters(program);
     }
+    dumpMatchingIR("before resource tracking");
     Shader::Optimization::ResourceTrackingPass(program);
     Shader::Optimization::IdentityRemovalPass(program.blocks);
     Shader::Optimization::DeadCodeEliminationPass(program);

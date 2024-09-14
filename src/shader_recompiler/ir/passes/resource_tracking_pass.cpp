@@ -8,6 +8,7 @@
 #include "shader_recompiler/ir/breadth_first_search.h"
 #include "shader_recompiler/ir/ir_emitter.h"
 #include "shader_recompiler/ir/program.h"
+#include "shader_recompiler/ir/type.h"
 #include "video_core/amdgpu/resource.h"
 
 namespace Shader::Optimization {
@@ -444,7 +445,8 @@ void PatchTextureBufferInstruction(IR::Block& block, IR::Inst& inst, Info& info,
 IR::Value PatchCubeCoord(IR::IREmitter& ir, const IR::Value& s, const IR::Value& t,
                          const IR::Value& z, bool is_storage) {
     // When cubemap is written with imageStore it is treated like 2DArray.
-    if (is_storage) {
+    // why does IMAGE_LOAD -> ir.imageFetch ???
+    if (is_storage || s.Type() == IR::Type::U32) {
         return ir.CompositeConstruct(s, t, z);
     }
     // We need to fix x and y coordinate,
