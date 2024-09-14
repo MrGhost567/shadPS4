@@ -209,8 +209,15 @@ Id EmitImageGradient(EmitContext& ctx, IR::Inst* inst, u32 handle, Id coords, Id
                                         operands.operands);
 }
 
-Id EmitImageRead(EmitContext& ctx, IR::Inst* inst, const IR::Value& index, Id coords) {
-    UNREACHABLE_MSG("SPIR-V Instruction");
+Id EmitImageRead(EmitContext& ctx, IR::Inst* inst, u32 handle, Id coords) {
+    const auto& texture = ctx.images[handle & 0xFFFF];
+    const Id image = ctx.OpLoad(texture.image_type, texture.id);
+    const Id result_type = texture.data_types->Get(4);
+    ImageOperands operands;
+    // TODO Lod unsupported with OpImageRead
+    // operands.Add(spv::ImageOperandsMask::Lod, lod);
+    return ctx.OpBitcast(
+        ctx.U32[4], ctx.OpImageRead(result_type, image, coords, operands.mask, operands.operands));
 }
 
 void EmitImageWrite(EmitContext& ctx, IR::Inst* inst, u32 handle, Id coords, Id color) {
