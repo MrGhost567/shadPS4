@@ -835,7 +835,7 @@ void PS4_SYSV_ABI sceGnmDingDong(u32 gnm_vqid, u32 next_offs_dw) {
         seq_num = 0u;
     }
 
-    AmdGpu::Liverpool::SequenceNum sSeqNum(last_frame_num, gnm_vqid, seq_num);
+    AmdGpu::Liverpool::SequenceNum seqnum(last_frame_num, gnm_vqid, seq_num);
 
     if (Config::dumpPM4()) {
         // Up to this point, all ACB submissions have been stored in a secondary command buffer.
@@ -854,14 +854,14 @@ void PS4_SYSV_ABI sceGnmDingDong(u32 gnm_vqid, u32 next_offs_dw) {
 
     LOG_DEBUG(Lib_GnmDriver, "vqid {}, next_offset_dw {}, acb {}, asc queue {}, seq num {}", vqid,
               next_offs_dw, acb_span, asc_queue,
-              AmdGpu::Liverpool::SubmitId{AmdGpu::Liverpool::QueueType::acb, sSeqNum});
+              AmdGpu::Liverpool::SubmitId{AmdGpu::Liverpool::QueueType::acb, seqnum});
 
-    liverpool->SubmitAsc(vqid, acb_span, sSeqNum);
+    liverpool->SubmitAsc(vqid, acb_span, seqnum);
 
     if (*asc_queue.read_addr / (asc_queue.ring_size_dw * 4) !=
         (*asc_queue.read_addr + acb_size) / (asc_queue.ring_size_dw * 4)) {
         LOG_DEBUG(Lib_GnmDriver, "ring buffer wrapping around, seq num {}",
-                  AmdGpu::Liverpool::SubmitId{AmdGpu::Liverpool::QueueType::acb, sSeqNum});
+                  AmdGpu::Liverpool::SubmitId{AmdGpu::Liverpool::QueueType::acb, seqnum});
     }
     *asc_queue.read_addr += acb_size;
     *asc_queue.read_addr %= asc_queue.ring_size_dw * 4;
