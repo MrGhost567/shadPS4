@@ -626,7 +626,7 @@ Liverpool::Task Liverpool::ProcessCompute(u32 idx, int vqid, SequenceNum seqnum)
             u32 idx;
             {
                 std::scoped_lock<std::mutex> lk(queue.m_access);
-                u32 idx = queue.compute_spans.size();
+                idx = queue.compute_spans.size();
                 queue.compute_spans.push_back(indirect_span);
             }
             auto task = ProcessCompute(idx, vqid, seqnum);
