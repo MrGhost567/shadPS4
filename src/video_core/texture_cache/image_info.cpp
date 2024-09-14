@@ -209,6 +209,9 @@ ImageInfo::ImageInfo(const AmdGpu::Image& image, bool force_depth /*= false*/) n
             pixel_format = vk::Format::eD32SfloatS8Uint;
         } else if (pixel_format == vk::Format::eR16Unorm) {
             pixel_format = vk::Format::eD16UnormS8Uint;
+        } else if (pixel_format == vk::Format::eR8G8B8A8Unorm) {
+            // IDk wtf
+            pixel_format = vk::Format::eD16UnormS8Uint;
         } else {
             UNREACHABLE();
         }

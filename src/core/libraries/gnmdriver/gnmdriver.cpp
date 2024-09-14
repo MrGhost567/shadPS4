@@ -365,7 +365,9 @@ static std::string DisassemblePM4(std::span<const u32> cmds) {
             cmds = NextPacket(cmds, header->type0.NumWords() + 1);
             break;
         case 1:
-            UNREACHABLE();
+            // UNREACHABLE();
+            append(fmt::format("PM4Type1:\n"));
+            cmds = NextPacket(cmds, 1);
         case 2:
             append(fmt::format("PM4Type2:\n"));
             cmds = NextPacket(cmds, 1);
@@ -409,12 +411,12 @@ static std::string DisassemblePM4(std::span<const u32> cmds) {
                 append(fmt::format("- src: atc=0x{:X}, cache_policy=0x{:X}, volatile=0x{:X}, "
                                    "sel=0x{:X}, addr=0x{:016X}\n",
                                    dma_data->src_atc.Value(), dma_data->src_cache_policy.Value(),
-                                   dma_data->src_volatile.Value(), dma_data->src_sel.Value(),
+                                   dma_data->src_volatile.Value(), (u32)dma_data->src_sel.Value(),
                                    ((u64)dma_data->src_addr_hi << 32) | dma_data->src_addr_lo));
                 append(fmt::format("- dst: atc=0x{:X}, cache_policy=0x{:X}, volatile=0x{:X}, "
                                    "sel=0x{:X}, addr=0x{:016X}\n",
                                    dma_data->dst_atc.Value(), dma_data->dst_cache_policy.Value(),
-                                   dma_data->dst_volatile.Value(), dma_data->dst_sel.Value(),
+                                   dma_data->dst_volatile.Value(), (u32)dma_data->dst_sel.Value(),
                                    ((u64)dma_data->dst_addr_hi << 32) | dma_data->dst_addr_lo));
                 break;
             }

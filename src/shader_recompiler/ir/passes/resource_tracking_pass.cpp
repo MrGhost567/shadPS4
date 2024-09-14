@@ -7,8 +7,10 @@
 #include "shader_recompiler/ir/basic_block.h"
 #include "shader_recompiler/ir/breadth_first_search.h"
 #include "shader_recompiler/ir/ir_emitter.h"
+#include "shader_recompiler/ir/opcodes.h"
 #include "shader_recompiler/ir/program.h"
 #include "shader_recompiler/ir/type.h"
+#include "shader_recompiler/ir/value.h"
 #include "video_core/amdgpu/resource.h"
 
 namespace Shader::Optimization {
@@ -445,8 +447,7 @@ void PatchTextureBufferInstruction(IR::Block& block, IR::Inst& inst, Info& info,
 IR::Value PatchCubeCoord(IR::IREmitter& ir, const IR::Value& s, const IR::Value& t,
                          const IR::Value& z, bool is_storage) {
     // When cubemap is written with imageStore it is treated like 2DArray.
-    // why does IMAGE_LOAD -> ir.imageFetch ???
-    if (is_storage || s.Type() == IR::Type::U32) {
+    if (is_storage) {
         return ir.CompositeConstruct(s, t, z);
     }
     // We need to fix x and y coordinate,
@@ -468,6 +469,7 @@ void PatchImageInstruction(IR::Block& block, IR::Inst& inst, Info& info, Descrip
         }
         return std::nullopt;
     };
+
     const auto result = IR::BreadthFirstSearch(&inst, pred);
     ASSERT_MSG(result, "Unable to find image sharp source");
     const IR::Inst* producer = result.value();
@@ -482,6 +484,30 @@ void PatchImageInstruction(IR::Block& block, IR::Inst& inst, Info& info, Descrip
         LOG_ERROR(Render_Vulkan, "Shader compiled with unbound image!");
         image = AmdGpu::Image::Null();
     }
+    if (inst.GetOpcode() == IR::Opcode::ImageFetch && image.GetType() == AmdGpu::ImageType::Cube) {
+        auto inst_info = inst.Flags<IR::TextureInstInfo>();
+        IR::IREmitter ir{block, IR::Block::InstructionList::s_iterator_to(inst)};
+        IR::Value handle = inst.Arg(0);
+        IR::Value coords = inst.Arg(1);
+        // TODO how to do lod for cubemaps? Cant do OpImageFetch w/ cube, but can't use Lod w/
+        // OpImageRead
+        IR::U32 lod; // = ir.Imm32(0);
+        if (inst_info.explicit_lod) {
+            // lod = IR::U32(ir.CompositeExtract(coords, 3));
+            IR::Value x = ir.CompositeExtract(coords, 0);
+            IR::Value y = ir.CompositeExtract(coords, 0);
+            IR::Value face_id = ir.CompositeExtract(coords, 0);
+            coords = ir.CompositeConstruct(x, y, face_id);
+        }
+
+        // TODO actually handle lod
+        inst_info.explicit_lod.Assign(0);
+        IR::Value replacement = ir.ImageRead(handle, coords, inst_info);
+        inst.ReplaceUsesWith(replacement);
+        PatchImageInstruction(block, *replacement.Inst(), info, descriptors);
+        return;
+    }
+
     ASSERT(image.GetType() != AmdGpu::ImageType::Invalid);
     const bool is_storage = IsImageStorageInstruction(inst);
     u32 image_binding = descriptors.Add(ImageResource{
