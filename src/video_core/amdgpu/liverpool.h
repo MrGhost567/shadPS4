@@ -1157,7 +1157,7 @@ private:
     std::span<const u32> CopyComputeCmdBuffer(u32 vqid, std::span<const u32> acb);
     Task ProcessGraphics(std::span<const u32> dcb, std::span<const u32> ccb, SequenceNum seq);
     Task ProcessCeUpdate(std::span<const u32> ccb);
-    Task ProcessCompute(std::span<const u32> acb, int vqid, SequenceNum seq);
+    Task ProcessCompute(u32 idx, int vqid, SequenceNum seq);
 
     void Process(std::stop_token stoken);
 
@@ -1171,6 +1171,8 @@ public:
         std::vector<u32> ccb_buffer;
         std::vector<u32> acb_buffer;
         std::queue<Task::Handle> submits{};
+        u64 last_frame_with_gfx_submit{-1ULL};
+        std::vector<std::span<const u32>> compute_spans{};
         ComputeProgram cs_state{};
         VAddr indirect_args_addr{};
     };

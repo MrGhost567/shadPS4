@@ -566,8 +566,38 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
     TracyFiberLeave;
 }
 
-Liverpool::Task Liverpool::ProcessCompute(std::span<const u32> acb, int vqid, SequenceNum seqnum) {
+Liverpool::Task Liverpool::ProcessCompute(u32 idx, int vqid, SequenceNum seqnum) {
     TracyFiberEnter(acb_task_name);
+
+    auto& queue = mapped_queues[vqid];
+    if (vqid == GfxQueueId) {
+        for (;;) {
+            bool done;
+            {
+                std::scoped_lock<std::mutex> lk(queue.m_access);
+                done = queue.last_frame_with_gfx_submit >= seqnum.frames_submitted;
+            }
+            if (done) {
+                break;
+            }
+            co_yield {};
+        }
+    }
+    std::span<const u32> acb;
+    {
+        std::scoped_lock<std::mutex> lk(queue.m_access);
+        acb = queue.compute_spans[idx];
+        bool done = false;
+        for (u32 i = idx; i < queue.compute_spans.size(); i++) {
+            u64 acb_end = reinterpret_cast<u64>(acb.data()) + acb.size_bytes();
+            auto next_span = queue.compute_spans[i];
+            if (acb_end == reinterpret_cast<u64>(next_span.data())) {
+                LOG_DEBUG(Lib_GnmDriver, "merging consecutive compute spans");
+                acb = std::span<const u32>{acb.data(), acb.size() + next_span.size()};
+                queue.compute_spans[i] = {};
+            }
+        }
+    }
 
     LOG_DEBUG(Lib_GnmDriver, "vqid {}, acb {}, {}", vqid, acb, SubmitId{QueueType::acb, seqnum});
 
@@ -591,8 +621,15 @@ Liverpool::Task Liverpool::ProcessCompute(std::span<const u32> acb, int vqid, Se
         }
         case PM4ItOpcode::IndirectBuffer: {
             const auto* indirect_buffer = reinterpret_cast<const PM4CmdIndirectBuffer*>(header);
-            auto task = ProcessCompute(
-                {indirect_buffer->Address<const u32>(), indirect_buffer->ib_size}, vqid, seqnum);
+            std::span<const u32> indirect_span{indirect_buffer->Address<const u32>(),
+                                               indirect_buffer->ib_size};
+            u32 idx;
+            {
+                std::scoped_lock<std::mutex> lk(queue.m_access);
+                u32 idx = queue.compute_spans.size();
+                queue.compute_spans.push_back(indirect_span);
+            }
+            auto task = ProcessCompute(idx, vqid, seqnum);
             while (!task.handle.done()) {
                 task.handle.resume();
 
@@ -732,6 +769,7 @@ void Liverpool::SubmitGfx(std::span<const u32> dcb, std::span<const u32> ccb, Se
     auto task = ProcessGraphics(dcb, ccb, seqnum);
     {
         std::scoped_lock lock{queue.m_access};
+        queue.last_frame_with_gfx_submit = seqnum.frames_submitted;
         queue.submits.emplace(task.handle);
     }
 
@@ -751,12 +789,15 @@ void Liverpool::SubmitAsc(u32 vqid, std::span<const u32> acb, SequenceNum seqnum
               SubmitId{QueueType::acb, seqnum});
 
     if (Config::copyGPUCmdBuffers()) {
-        acb = CopyComputeCmdBuffer(vqid, acb);
+        // acb = CopyComputeCmdBuffer(vqid, acb);
     }
 
-    const auto& task = ProcessCompute(acb, vqid, seqnum);
     {
-        std::scoped_lock lock{queue.m_access};
+        std::scoped_lock<std::mutex> lk(queue.m_access);
+        u32 idx = queue.compute_spans.size();
+        queue.compute_spans.push_back(acb);
+        const auto& task = ProcessCompute(idx, vqid, seqnum);
+
         queue.submits.emplace(task.handle);
     }
 
