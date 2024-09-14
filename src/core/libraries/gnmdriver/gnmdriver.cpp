@@ -821,13 +821,6 @@ void PS4_SYSV_ABI sceGnmDingDong(u32 gnm_vqid, u32 next_offs_dw) {
 
     /* Suspend logic goes here */
 
-    auto vqid = gnm_vqid - 1;
-    auto& asc_queue = asc_queues[{vqid}];
-    const auto* acb_ptr = reinterpret_cast<const u32*>(asc_queue.map_addr + *asc_queue.read_addr);
-    const auto acb_size = next_offs_dw ? (next_offs_dw << 2u) - *asc_queue.read_addr
-                                       : (asc_queue.ring_size_dw << 2u) - *asc_queue.read_addr;
-    const std::span<const u32> acb_span{acb_ptr, acb_size >> 2u};
-
     static auto last_frame_num = -1LL;
     static u32 seq_num{};
     if (last_frame_num == frames_submitted) {
@@ -837,7 +830,22 @@ void PS4_SYSV_ABI sceGnmDingDong(u32 gnm_vqid, u32 next_offs_dw) {
         seq_num = 0u;
     }
 
+    auto vqid = gnm_vqid - 1;
+    auto& asc_queue = asc_queues[{vqid}];
     AmdGpu::Liverpool::SequenceNum seqnum(last_frame_num, gnm_vqid, seq_num);
+    if (*asc_queue.read_addr > ((next_offs_dw % asc_queue.ring_size_dw) << 2)) {
+        LOG_DEBUG(Lib_GnmDriver, "ring buffer wrapping around, vqid {}, seq num {}", vqid,
+                  AmdGpu::Liverpool::SubmitId{AmdGpu::Liverpool::QueueType::acb, seqnum});
+        next_offs_dw = asc_queue.ring_size_dw + (next_offs_dw % asc_queue.ring_size_dw);
+    } else {
+        next_offs_dw %= asc_queue.ring_size_dw;
+    }
+
+    const auto* acb_ptr = reinterpret_cast<const u32*>(asc_queue.map_addr + *asc_queue.read_addr);
+    const auto acb_size = next_offs_dw ? (next_offs_dw << 2u) - *asc_queue.read_addr
+                                       : (asc_queue.ring_size_dw << 2u) - *asc_queue.read_addr;
+
+    const std::span<const u32> acb_span{acb_ptr, acb_size >> 2u};
 
     if (Config::dumpPM4()) {
         // Up to this point, all ACB submissions have been stored in a secondary command buffer.
@@ -860,11 +868,6 @@ void PS4_SYSV_ABI sceGnmDingDong(u32 gnm_vqid, u32 next_offs_dw) {
 
     liverpool->SubmitAsc(vqid, acb_span, seqnum);
 
-    if (*asc_queue.read_addr / (asc_queue.ring_size_dw * 4) !=
-        (*asc_queue.read_addr + acb_size) / (asc_queue.ring_size_dw * 4)) {
-        LOG_DEBUG(Lib_GnmDriver, "ring buffer wrapping around, seq num {}",
-                  AmdGpu::Liverpool::SubmitId{AmdGpu::Liverpool::QueueType::acb, seqnum});
-    }
     *asc_queue.read_addr += acb_size;
     *asc_queue.read_addr %= asc_queue.ring_size_dw * 4;
 }
@@ -1515,7 +1518,8 @@ int PS4_SYSV_ABI sceGnmMapComputeQueue(u32 pipe_id, u32 queue_id, VAddr ring_bas
         return ORBIS_GNM_ERROR_COMPUTEQUEUE_INVALID_READ_PTR_ADDR;
     }
 
-    auto vqid = asc_queues.insert(VAddr(ring_base_addr), read_ptr_addr, ring_size_dw);
+    // auto vqid = asc_queues.insert(VAddr(ring_base_addr), read_ptr_addr, ring_size_dw);
+    auto vqid = asc_queues.insert(VAddr(ring_base_addr), read_ptr_addr, ring_size_dw * 8); // hack
     // We need to offset index as `dingDong` assumes it to be from the range [1..64]
     const auto gnm_vqid = vqid.index + 1;
     LOG_INFO(Lib_GnmDriver, "ASC pipe {} queue {} mapped to vqueue {}", pipe_id, queue_id,
