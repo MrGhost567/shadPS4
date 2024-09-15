@@ -161,7 +161,9 @@ Id EmitImageFetch(EmitContext& ctx, IR::Inst* inst, u32 handle, Id coords, const
         texture.is_storage
             ? ctx.OpImageRead(result_type, image, coords, operands.mask, operands.operands)
             : ctx.OpImageFetch(result_type, image, coords, operands.mask, operands.operands);
-    return ctx.OpBitcast(ctx.F32[4], texel);
+    auto cast_ty = texture.is_storage ? ctx.U32[4] : ctx.F32[4];
+    // auto cast_ty = ctx.F32[4];
+    return ctx.OpBitcast(cast_ty, texel);
 }
 
 Id EmitImageQueryDimensions(EmitContext& ctx, IR::Inst* inst, u32 handle, Id lod, bool skip_mips) {

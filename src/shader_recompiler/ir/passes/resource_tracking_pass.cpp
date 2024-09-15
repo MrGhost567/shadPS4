@@ -502,9 +502,10 @@ void PatchImageInstruction(IR::Block& block, IR::Inst& inst, Info& info, Descrip
 
         // TODO actually handle lod
         inst_info.explicit_lod.Assign(0);
-        IR::Value replacement = ir.ImageRead(handle, coords, inst_info);
+        IR::Value image_read = ir.ImageRead(handle, coords, inst_info);
+        IR::Value replacement = ir.BitcastF32X4U32X4(image_read);
         inst.ReplaceUsesWith(replacement);
-        PatchImageInstruction(block, *replacement.Inst(), info, descriptors);
+        PatchImageInstruction(block, *image_read.Inst(), info, descriptors);
         return;
     }
 

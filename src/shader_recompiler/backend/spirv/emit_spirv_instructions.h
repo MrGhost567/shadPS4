@@ -162,6 +162,7 @@ void EmitBitCastU64F64(EmitContext& ctx);
 Id EmitBitCastF16U16(EmitContext& ctx, Id value);
 Id EmitBitCastF32U32(EmitContext& ctx, Id value);
 void EmitBitCastF64U64(EmitContext& ctx);
+Id EmitBitCastF32X4U32X4(EmitContext& ctx, Id value);
 Id EmitPackUint2x32(EmitContext& ctx, Id value);
 Id EmitUnpackUint2x32(EmitContext& ctx, Id value);
 Id EmitPackFloat2x16(EmitContext& ctx, Id value);

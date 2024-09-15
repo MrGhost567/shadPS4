@@ -30,6 +30,10 @@ void EmitBitCastF64U64(EmitContext&) {
     UNREACHABLE_MSG("SPIR-V Instruction");
 }
 
+Id EmitBitCastF32X4U32X4(EmitContext& ctx, Id value) {
+    return ctx.OpBitcast(ctx.F32[4], value);
+}
+
 Id EmitPackUint2x32(EmitContext& ctx, Id value) {
     return ctx.OpBitcast(ctx.U64, value);
 }
