@@ -18,8 +18,6 @@ Pipeline::~Pipeline() = default;
 
 void Pipeline::BindTextures(VideoCore::TextureCache& texture_cache, const Shader::Info& stage,
                             u32& binding, DescriptorWrites& set_writes) const {
-    static boost::container::static_vector<vk::DescriptorImageInfo, 32> image_infos;
-    image_infos.clear();
 
     using ImageBindingInfo = std::tuple<VideoCore::ImageId, AmdGpu::Image, bool>;
     boost::container::static_vector<ImageBindingInfo, 32> image_bindings;
