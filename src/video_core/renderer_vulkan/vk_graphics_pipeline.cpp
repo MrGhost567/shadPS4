@@ -41,8 +41,8 @@ GraphicsPipeline::GraphicsPipeline(const Instance& instance_, Scheduler& schedul
     };
     pipeline_layout = instance.GetDevice().createPipelineLayoutUnique(layout_info);
 
-    boost::container::static_vector<vk::VertexInputBindingDescription, 32> bindings;
-    boost::container::static_vector<vk::VertexInputAttributeDescription, 32> attributes;
+    boost::container::static_vector<vk::VertexInputBindingDescription, 32> vertex_bindings;
+    boost::container::static_vector<vk::VertexInputAttributeDescription, 32> vertex_attributes;
     const auto& vs_info = stages[u32(Shader::Stage::Vertex)];
     for (const auto& input : vs_info->vs_inputs) {
         if (input.instance_step_rate == Shader::Info::VsInput::InstanceIdType::OverStepRate0 ||
@@ -52,13 +52,13 @@ GraphicsPipeline::GraphicsPipeline(const Instance& instance_, Scheduler& schedul
         }
 
         const auto buffer = vs_info->ReadUd<AmdGpu::Buffer>(input.sgpr_base, input.dword_offset);
-        attributes.push_back({
+        vertex_attributes.push_back({
             .location = input.binding,
             .binding = input.binding,
             .format = LiverpoolToVK::SurfaceFormat(buffer.GetDataFmt(), buffer.GetNumberFmt()),
             .offset = 0,
         });
-        bindings.push_back({
+        vertex_bindings.push_back({
             .binding = input.binding,
             .stride = buffer.GetStride(),
             .inputRate = input.instance_step_rate == Shader::Info::VsInput::None
@@ -68,10 +68,10 @@ GraphicsPipeline::GraphicsPipeline(const Instance& instance_, Scheduler& schedul
     }
 
     const vk::PipelineVertexInputStateCreateInfo vertex_input_info = {
-        .vertexBindingDescriptionCount = static_cast<u32>(bindings.size()),
-        .pVertexBindingDescriptions = bindings.data(),
-        .vertexAttributeDescriptionCount = static_cast<u32>(attributes.size()),
-        .pVertexAttributeDescriptions = attributes.data(),
+        .vertexBindingDescriptionCount = static_cast<u32>(vertex_bindings.size()),
+        .pVertexBindingDescriptions = vertex_bindings.data(),
+        .vertexAttributeDescriptionCount = static_cast<u32>(vertex_attributes.size()),
+        .pVertexAttributeDescriptions = vertex_attributes.data(),
     };
 
     if (key.prim_type == Liverpool::PrimitiveType::RectList && !IsEmbeddedVs()) {
@@ -95,9 +95,6 @@ GraphicsPipeline::GraphicsPipeline(const Instance& instance_, Scheduler& schedul
                          ? vk::FrontFace::eClockwise
                          : vk::FrontFace::eCounterClockwise,
         .depthBiasEnable = bool(key.depth_bias_enable),
-        .depthBiasConstantFactor = key.depth_bias_const_factor,
-        .depthBiasClamp = key.depth_bias_clamp,
-        .depthBiasSlopeFactor = key.depth_bias_slope_factor,
         .lineWidth = 1.0f,
     };
 
@@ -134,9 +131,10 @@ GraphicsPipeline::GraphicsPipeline(const Instance& instance_, Scheduler& schedul
     };
 
     boost::container::static_vector<vk::DynamicState, 14> dynamic_states = {
-        vk::DynamicState::eViewport,
-        vk::DynamicState::eScissor,
-        vk::DynamicState::eBlendConstants,
+        vk::DynamicState::eViewport,           vk::DynamicState::eScissor,
+        vk::DynamicState::eBlendConstants,     vk::DynamicState::eDepthBounds,
+        vk::DynamicState::eDepthBias,          vk::DynamicState::eStencilReference,
+        vk::DynamicState::eStencilCompareMask, vk::DynamicState::eStencilWriteMask,
     };
 
     if (instance.IsColorWriteEnableSupported()) {
@@ -153,39 +151,31 @@ GraphicsPipeline::GraphicsPipeline(const Instance& instance_, Scheduler& schedul
     };
 
     const vk::PipelineDepthStencilStateCreateInfo depth_info = {
-        .depthTestEnable = key.depth.depth_enable,
-        .depthWriteEnable = key.depth.depth_write_enable,
-        .depthCompareOp = LiverpoolToVK::CompareOp(key.depth.depth_func),
-        .depthBoundsTestEnable = key.depth.depth_bounds_enable,
-        .stencilTestEnable = key.depth.stencil_enable,
+        .depthTestEnable = key.depth_stencil.depth_enable,
+        .depthWriteEnable = key.depth_stencil.depth_write_enable,
+        .depthCompareOp = LiverpoolToVK::CompareOp(key.depth_stencil.depth_func),
+        .depthBoundsTestEnable = key.depth_stencil.depth_bounds_enable,
+        .stencilTestEnable = key.depth_stencil.stencil_enable,
         .front{
             .failOp = LiverpoolToVK::StencilOp(key.stencil.stencil_fail_front),
             .passOp = LiverpoolToVK::StencilOp(key.stencil.stencil_zpass_front),
             .depthFailOp = LiverpoolToVK::StencilOp(key.stencil.stencil_zfail_front),
-            .compareOp = LiverpoolToVK::CompareOp(key.depth.stencil_ref_func),
-            .compareMask = key.stencil_ref_front.stencil_mask,
-            .writeMask = key.stencil_ref_front.stencil_write_mask,
-            .reference = key.stencil_ref_front.stencil_test_val,
+            .compareOp = LiverpoolToVK::CompareOp(key.depth_stencil.stencil_ref_func),
         },
         .back{
-            .failOp = LiverpoolToVK::StencilOp(key.depth.backface_enable
+            .failOp = LiverpoolToVK::StencilOp(key.depth_stencil.backface_enable
                                                    ? key.stencil.stencil_fail_back.Value()
                                                    : key.stencil.stencil_fail_front.Value()),
-            .passOp = LiverpoolToVK::StencilOp(key.depth.backface_enable
+            .passOp = LiverpoolToVK::StencilOp(key.depth_stencil.backface_enable
                                                    ? key.stencil.stencil_zpass_back.Value()
                                                    : key.stencil.stencil_zpass_front.Value()),
-            .depthFailOp = LiverpoolToVK::StencilOp(key.depth.backface_enable
+            .depthFailOp = LiverpoolToVK::StencilOp(key.depth_stencil.backface_enable
                                                         ? key.stencil.stencil_zfail_back.Value()
                                                         : key.stencil.stencil_zfail_front.Value()),
-            .compareOp = LiverpoolToVK::CompareOp(key.depth.backface_enable
-                                                      ? key.depth.stencil_bf_func.Value()
-                                                      : key.depth.stencil_ref_func.Value()),
-            .compareMask = key.stencil_ref_back.stencil_mask,
-            .writeMask = key.stencil_ref_back.stencil_write_mask,
-            .reference = key.stencil_ref_back.stencil_test_val,
+            .compareOp = LiverpoolToVK::CompareOp(key.depth_stencil.backface_enable
+                                                      ? key.depth_stencil.stencil_bf_func.Value()
+                                                      : key.depth_stencil.stencil_ref_func.Value()),
         },
-        .minDepthBounds = key.depth_bounds_min,
-        .maxDepthBounds = key.depth_bounds_max,
     };
 
     auto stage = u32(Shader::Stage::Vertex);
@@ -301,7 +291,9 @@ GraphicsPipeline::GraphicsPipeline(const Instance& instance_, Scheduler& schedul
 GraphicsPipeline::~GraphicsPipeline() = default;
 
 void GraphicsPipeline::BuildDescSetLayout() {
+    boost::container::small_vector<vk::DescriptorSetLayoutBinding, 32> bindings;
     u32 binding{};
+
     for (const auto* stage : stages) {
         if (!stage) {
             continue;
@@ -361,11 +353,12 @@ void GraphicsPipeline::BindResources(const Liverpool::Regs& regs,
     // Bind resource buffers and textures.
     boost::container::static_vector<vk::BufferView, 8> buffer_views;
     boost::container::static_vector<vk::DescriptorBufferInfo, 32> buffer_infos;
-    boost::container::static_vector<vk::DescriptorImageInfo, 32> image_infos;
     boost::container::small_vector<vk::WriteDescriptorSet, 16> set_writes;
     boost::container::small_vector<vk::BufferMemoryBarrier2, 16> buffer_barriers;
     Shader::PushData push_data{};
     u32 binding{};
+
+    image_infos.clear();
 
     for (const auto* stage : stages) {
         if (!stage) {
