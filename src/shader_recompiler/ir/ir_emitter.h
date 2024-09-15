@@ -34,6 +34,8 @@ public:
     template <typename Dest, typename Source>
     [[nodiscard]] Dest BitCast(const Source& value);
 
+    [[nodiscard]] Value BitcastF32X4U32X4(const IR::Value& value);
+
     U1 ConditionRef(const U1& value);
     void Reference(const Value& value);
 
