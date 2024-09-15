@@ -84,6 +84,10 @@ IR::F64 IREmitter::BitCast<IR::F64, IR::U64>(const IR::U64& value) {
     return Inst<IR::F64>(Opcode::BitCastF64U64, value);
 }
 
+IR::Value IREmitter::BitcastF32X4U32X4(const IR::Value& value) {
+    return Inst(Opcode::BitCastF32X4U32X4, value);
+}
+
 U1 IREmitter::ConditionRef(const U1& value) {
     return Inst<U1>(Opcode::ConditionRef, value);
 }
