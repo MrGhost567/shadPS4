@@ -31,8 +31,6 @@ struct GraphicsPipelineKey {
     vk::Format stencil_format;
 
     Liverpool::DepthControl depth;
-    float depth_bounds_min;
-    float depth_bounds_max;
     float depth_bias_const_factor;
     float depth_bias_slope_factor;
     float depth_bias_clamp;
