@@ -287,6 +287,7 @@ void Rasterizer::UpdateDynamicState(const GraphicsPipeline& pipeline) {
     auto& regs = liverpool->regs;
     const auto cmdbuf = scheduler.CommandBuffer();
     cmdbuf.setBlendConstants(&regs.blend_constants.red);
+    cmdbuf.setDepthBounds(regs.depth_bounds_min, regs.depth_bounds_max);
 
     if (instance.IsColorWriteEnableSupported()) {
         const auto& write_masks = pipeline.GetWriteMasks();

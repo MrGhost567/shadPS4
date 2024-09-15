@@ -167,6 +167,8 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline() {
     }
     const auto [it, is_new] = graphics_pipelines.try_emplace(graphics_key);
     if (is_new) {
+        LOG_CRITICAL(Render_Vulkan, "Creating new graphics pipeline. Total pipelines: {}",
+                     graphics_pipelines.size());
         it.value() = std::make_unique<GraphicsPipeline>(
             instance, scheduler, desc_heap, graphics_key, *pipeline_cache, infos, modules);
     }
@@ -203,8 +205,6 @@ bool PipelineCache::RefreshGraphicsKey() {
     key.depth = regs.depth_control;
     key.depth.depth_write_enable.Assign(regs.depth_control.depth_write_enable.Value() &&
                                         !regs.depth_render_control.depth_clear_enable);
-    key.depth_bounds_min = regs.depth_bounds_min;
-    key.depth_bounds_max = regs.depth_bounds_max;
     key.depth_bias_enable = regs.polygon_control.enable_polygon_offset_back ||
                             regs.polygon_control.enable_polygon_offset_front ||
                             regs.polygon_control.enable_polygon_offset_para;
