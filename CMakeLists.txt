@@ -227,7 +227,12 @@ set(SYSTEM_LIBS src/core/libraries/system/commondialog.cpp
                 src/core/libraries/system/msgdialog_ui.cpp
                 src/core/libraries/system/posix.cpp
                 src/core/libraries/system/posix.h
-                src/core/libraries/save_data/error_codes.h
+                src/core/libraries/save_data/save_backup.cpp
+                src/core/libraries/save_data/save_backup.h
+                src/core/libraries/save_data/save_instance.cpp
+                src/core/libraries/save_data/save_instance.h
+                src/core/libraries/save_data/save_memory.cpp
+                src/core/libraries/save_data/save_memory.h
                 src/core/libraries/save_data/savedata.cpp
                 src/core/libraries/save_data/savedata.h
                 src/core/libraries/system/savedatadialog.cpp
@@ -344,6 +349,7 @@ set(COMMON src/common/logging/backend.cpp
            src/common/concepts.h
            src/common/config.cpp
            src/common/config.h
+           src/common/cstring.h
            src/common/debug.h
            src/common/disassembler.cpp
            src/common/disassembler.h
