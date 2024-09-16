@@ -62,7 +62,8 @@ struct StageSpecialization {
                      });
         ForEachSharp(binding, images, info->images,
                      [](auto& spec, const auto& desc, AmdGpu::Image sharp) {
-                         spec.type = sharp.GetType();
+                         spec.type = sharp.IsPatialCubemap() ? AmdGpu::ImageType::Color2DArray
+                                                             : sharp.GetType();
                          spec.is_integer = AmdGpu::IsInteger(sharp.GetNumberFmt());
                      });
     }

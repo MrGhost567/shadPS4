@@ -282,6 +282,11 @@ struct Image {
     bool IsTiled() const {
         return GetTilingMode() != TilingMode::Display_Linear;
     }
+
+    bool IsPatialCubemap() const {
+        const auto viewed_slice = last_array - base_array + 1;
+        return GetType() == ImageType::Cube && viewed_slice < 6;
+    }
 };
 static_assert(sizeof(Image) == 32); // 256bits
 
