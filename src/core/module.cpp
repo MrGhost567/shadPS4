@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <xbyak/xbyak.h>
 #include "common/alignment.h"
 #include "common/arch.h"
 #include "common/assert.h"
@@ -91,11 +92,9 @@ void Module::LoadModuleToMemory(u32& max_tls_index) {
     LoadOffset += CODE_BASE_INCR * (1 + aligned_base_size / CODE_BASE_INCR);
     LOG_INFO(Core_Linker, "Loading module {} to {}", name, fmt::ptr(*out_addr));
 
-#ifdef ARCH_X86_64
     // Initialize trampoline generator.
     void* trampoline_addr = std::bit_cast<void*>(base_virtual_addr + aligned_base_size);
-    RegisterPatchModule(*out_addr, aligned_base_size, trampoline_addr, TrampolineSize);
-#endif
+    Xbyak::CodeGenerator c(TrampolineSize, trampoline_addr);
 
     LOG_INFO(Core_Linker, "======== Load Module to Memory ========");
     LOG_INFO(Core_Linker, "base_virtual_addr ......: {:#018x}", base_virtual_addr);
@@ -136,7 +135,7 @@ void Module::LoadModuleToMemory(u32& max_tls_index) {
             add_segment(elf_pheader[i]);
 #ifdef ARCH_X86_64
             if (elf_pheader[i].p_flags & PF_EXEC) {
-                PrePatchInstructions(segment_addr, segment_file_size);
+                PatchInstructions(segment_addr, segment_file_size, c);
             }
 #endif
             break;
