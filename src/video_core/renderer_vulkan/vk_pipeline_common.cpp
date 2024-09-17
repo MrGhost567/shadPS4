@@ -10,6 +10,8 @@
 
 namespace Vulkan {
 
+boost::container::static_vector<vk::DescriptorImageInfo, 32> Pipeline::image_infos;
+
 Pipeline::Pipeline(const Instance& instance_, Scheduler& scheduler_, DescriptorHeap& desc_heap_,
                    vk::PipelineCache pipeline_cache)
     : instance{instance_}, scheduler{scheduler_}, desc_heap{desc_heap_} {}
