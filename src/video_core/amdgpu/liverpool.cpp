@@ -10,8 +10,13 @@
 #include "core/libraries/videoout/driver.h"
 #include "video_core/amdgpu/liverpool.h"
 #include "video_core/amdgpu/pm4_cmds.h"
+#include "video_core/amdgpu/seqnum.h"
 #include "video_core/renderdoc.h"
 #include "video_core/renderer_vulkan/vk_rasterizer.h"
+
+#define DEF_SEQNUM_GV 1
+#include "video_core/amdgpu/gv_seqnum.h"
+#undef DEF_SEQNUM_GV
 
 namespace AmdGpu {
 
@@ -175,6 +180,7 @@ Liverpool::Task Liverpool::ProcessCeUpdate(std::span<const u32> ccb) {
 
 Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<const u32> ccb,
                                            SequenceNum seqnum) {
+    g_seqnum = seqnum;
     TracyFiberEnter(dcb_task_name);
 
     LOG_DEBUG(Lib_GnmDriver, "dcb {}, ccb {}, {}", dcb, ccb, seqnum);
@@ -354,7 +360,8 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
                 regs.draw_initiator = draw_index->draw_initiator;
                 if (rasterizer) {
                     const auto cmd_address = reinterpret_cast<const void*>(header);
-                    rasterizer->ScopeMarkerBegin(fmt::format("dcb:{}:DrawIndex2", cmd_address));
+                    rasterizer->ScopeMarkerBegin(
+                        fmt::format("{}:{}:DrawIndex2", seqnum, cmd_address));
                     rasterizer->Draw(true);
                     rasterizer->ScopeMarkerEnd();
                 }
@@ -369,7 +376,7 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
                 if (rasterizer) {
                     const auto cmd_address = reinterpret_cast<const void*>(header);
                     rasterizer->ScopeMarkerBegin(
-                        fmt::format("dcb:{}:DrawIndexOffset2", cmd_address));
+                        fmt::format("{}:{}:DrawIndexOffset2", seqnum, cmd_address));
                     rasterizer->Draw(true, draw_index_off->index_offset);
                     rasterizer->ScopeMarkerEnd();
                 }
@@ -381,7 +388,8 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
                 regs.draw_initiator = draw_index->draw_initiator;
                 if (rasterizer) {
                     const auto cmd_address = reinterpret_cast<const void*>(header);
-                    rasterizer->ScopeMarkerBegin(fmt::format("dcb:{}:DrawIndexAuto", cmd_address));
+                    rasterizer->ScopeMarkerBegin(
+                        fmt::format("{}:{}:DrawIndexAuto", seqnum, cmd_address));
                     rasterizer->Draw(false);
                     rasterizer->ScopeMarkerEnd();
                 }
@@ -394,7 +402,8 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
                 const auto size = sizeof(PM4CmdDrawIndirect::DrawInstancedArgs);
                 if (rasterizer) {
                     const auto cmd_address = reinterpret_cast<const void*>(header);
-                    rasterizer->ScopeMarkerBegin(fmt::format("dcb:{}:DrawIndirect", cmd_address));
+                    rasterizer->ScopeMarkerBegin(
+                        fmt::format("{}:{}:DrawIndirect", seqnum, cmd_address));
                     rasterizer->DrawIndirect(false, ib_address, offset, size);
                     rasterizer->ScopeMarkerEnd();
                 }
@@ -423,7 +432,8 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
                 regs.cs_program.dispatch_initiator = dispatch_direct->dispatch_initiator;
                 if (rasterizer && (regs.cs_program.dispatch_initiator & 1)) {
                     const auto cmd_address = reinterpret_cast<const void*>(header);
-                    rasterizer->ScopeMarkerBegin(fmt::format("dcb:{}:Dispatch", cmd_address));
+                    rasterizer->ScopeMarkerBegin(
+                        fmt::format("{}:{}:Dispatch", seqnum, cmd_address));
                     rasterizer->DispatchDirect();
                     rasterizer->ScopeMarkerEnd();
                 }
@@ -526,6 +536,7 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
                     mapped_queues[GfxQueueId].cs_state = regs.cs_program;
                     TracyFiberLeave;
                     co_yield {};
+                    g_seqnum = seqnum;
                     TracyFiberEnter(dcb_task_name);
                     regs.cs_program = mapped_queues[GfxQueueId].cs_state;
                 }
@@ -568,6 +579,7 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
 
 Liverpool::Task Liverpool::ProcessCompute(u32 idx, int vqid, SequenceNum seqnum) {
     TracyFiberEnter(acb_task_name);
+    g_seqnum = seqnum;
 
     auto& queue = mapped_queues[vqid];
     if (vqid == GfxQueueId) {
@@ -581,6 +593,7 @@ Liverpool::Task Liverpool::ProcessCompute(u32 idx, int vqid, SequenceNum seqnum)
                 break;
             }
             co_yield {};
+            g_seqnum = seqnum;
         }
     }
     std::span<const u32> acb;
@@ -635,6 +648,7 @@ Liverpool::Task Liverpool::ProcessCompute(u32 idx, int vqid, SequenceNum seqnum)
 
                 TracyFiberLeave;
                 co_yield {};
+                g_seqnum = seqnum;
                 TracyFiberEnter(acb_task_name);
             };
             break;
@@ -656,7 +670,7 @@ Liverpool::Task Liverpool::ProcessCompute(u32 idx, int vqid, SequenceNum seqnum)
             regs.cs_program.dispatch_initiator = dispatch_direct->dispatch_initiator;
             if (rasterizer && (regs.cs_program.dispatch_initiator & 1)) {
                 const auto cmd_address = reinterpret_cast<const void*>(header);
-                rasterizer->ScopeMarkerBegin(fmt::format("acb[{}]:{}:Dispatch", vqid, cmd_address));
+                rasterizer->ScopeMarkerBegin(fmt::format("{}:{}:Dispatch", seqnum, cmd_address));
                 rasterizer->DispatchDirect();
                 rasterizer->ScopeMarkerEnd();
             }
@@ -680,6 +694,7 @@ Liverpool::Task Liverpool::ProcessCompute(u32 idx, int vqid, SequenceNum seqnum)
                 mapped_queues[vqid].cs_state = regs.cs_program;
                 TracyFiberLeave;
                 co_yield {};
+                g_seqnum = seqnum;
                 TracyFiberEnter(acb_task_name);
                 regs.cs_program = mapped_queues[vqid].cs_state;
             }

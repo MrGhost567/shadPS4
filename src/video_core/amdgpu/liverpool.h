@@ -21,6 +21,7 @@
 #include "shader_recompiler/params.h"
 #include "video_core/amdgpu/pixel_format.h"
 #include "video_core/amdgpu/resource.h"
+#include "video_core/amdgpu/seqnum.h"
 
 namespace Vulkan {
 class Rasterizer;
@@ -56,20 +57,6 @@ struct Liverpool {
     static constexpr u32 ConfigRegWordOffset = 0x2000;
     static constexpr u32 ShRegWordOffset = 0x2C00;
     static constexpr u32 NumRegs = 0xD000;
-
-#if 1
-    enum QueueType { acb, dcb, ccb };
-
-    struct SequenceNum {
-        QueueType type;
-        u64 frames_submitted;
-        u32 seq0;
-        u32 seq1;
-
-        SequenceNum(QueueType type_, u64 frames_submitted_, u32 seq_0_, u32 seq_1_)
-            : type(type_), frames_submitted(frames_submitted_), seq0(seq_0_), seq1(seq_1_) {}
-    };
-#endif
 
     using UserData = std::array<u32, NumShaderUserData>;
 
@@ -1271,22 +1258,22 @@ static_assert(GFX6_3D_REG_INDEX(num_instances) == 0xC24D);
 } // namespace AmdGpu
 
 template <>
-struct fmt::formatter<AmdGpu::Liverpool::QueueType> {
+struct fmt::formatter<SequenceNum::QueueType> {
     constexpr auto parse(format_parse_context& ctx) {
         return ctx.begin();
     }
-    auto format(AmdGpu::Liverpool::QueueType qtype, format_context& ctx) const {
+    auto format(SequenceNum::QueueType qtype, format_context& ctx) const {
         constexpr static std::array names = {"acb", "dcb", "ccb"};
         return fmt::format_to(ctx.out(), "{}", names[static_cast<size_t>(qtype)]);
     }
 };
 
 template <>
-struct fmt::formatter<AmdGpu::Liverpool::SequenceNum> {
+struct fmt::formatter<SequenceNum> {
     constexpr auto parse(format_parse_context& ctx) {
         return ctx.begin();
     }
-    auto format(const AmdGpu::Liverpool::SequenceNum& seqnum, format_context& ctx) const {
+    auto format(const SequenceNum& seqnum, format_context& ctx) const {
         return fmt::format_to(ctx.out(), "{:08}_{}_{}_{}", seqnum.frames_submitted, seqnum.type,
                               seqnum.seq0, seqnum.seq1);
     }
