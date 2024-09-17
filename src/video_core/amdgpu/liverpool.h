@@ -61,17 +61,13 @@ struct Liverpool {
     enum QueueType { acb, dcb, ccb };
 
     struct SequenceNum {
+        QueueType type;
         u64 frames_submitted;
         u32 seq0;
         u32 seq1;
 
-        SequenceNum(u64 frames_submitted_, u32 seq_0_, u32 seq_1_)
-            : frames_submitted(frames_submitted_), seq0(seq_0_), seq1(seq_1_) {}
-    };
-
-    struct SubmitId {
-        QueueType qtype;
-        SequenceNum seqnum;
+        SequenceNum(QueueType type_, u64 frames_submitted_, u32 seq_0_, u32 seq_1_)
+            : type(type_), frames_submitted(frames_submitted_), seq0(seq_0_), seq1(seq_1_) {}
     };
 #endif
 
@@ -1176,10 +1172,8 @@ public:
         std::mutex m_access{};
         std::atomic<u32> dcb_buffer_offset;
         std::atomic<u32> ccb_buffer_offset;
-        std::atomic<u32> acb_buffer_offset;
         std::vector<u32> dcb_buffer;
         std::vector<u32> ccb_buffer;
-        std::vector<u32> acb_buffer;
         std::queue<Task::Handle> submits{};
         u64 last_frame_with_gfx_submit{-1ULL};
         std::vector<std::span<const u32>> compute_spans{};
@@ -1277,19 +1271,6 @@ static_assert(GFX6_3D_REG_INDEX(num_instances) == 0xC24D);
 } // namespace AmdGpu
 
 template <>
-struct fmt::formatter<AmdGpu::Liverpool::GpuQueue> {
-    constexpr auto parse(format_parse_context& ctx) {
-        return ctx.begin();
-    }
-    auto format(const AmdGpu::Liverpool::GpuQueue& queue, format_context& ctx) const {
-        return fmt::format_to(ctx.out(), "(dcb_off={}, ccb_off={}, acb_off={}, submits_size={})",
-                              (u32)queue.dcb_buffer_offset.load(),
-                              (u32)queue.ccb_buffer_offset.load(),
-                              (u32)queue.acb_buffer_offset.load(), queue.submits.size());
-    }
-};
-
-template <>
 struct fmt::formatter<AmdGpu::Liverpool::QueueType> {
     constexpr auto parse(format_parse_context& ctx) {
         return ctx.begin();
@@ -1301,13 +1282,13 @@ struct fmt::formatter<AmdGpu::Liverpool::QueueType> {
 };
 
 template <>
-struct fmt::formatter<AmdGpu::Liverpool::SubmitId> {
+struct fmt::formatter<AmdGpu::Liverpool::SequenceNum> {
     constexpr auto parse(format_parse_context& ctx) {
         return ctx.begin();
     }
-    auto format(const AmdGpu::Liverpool::SubmitId& id, format_context& ctx) const {
-        return fmt::format_to(ctx.out(), "{:08}_{}_{}_{}", id.seqnum.frames_submitted, id.qtype,
-                              id.seqnum.seq0, id.seqnum.seq1);
+    auto format(const AmdGpu::Liverpool::SequenceNum& seqnum, format_context& ctx) const {
+        return fmt::format_to(ctx.out(), "{:08}_{}_{}_{}", seqnum.frames_submitted, seqnum.type,
+                              seqnum.seq0, seqnum.seq1);
     }
 };
 

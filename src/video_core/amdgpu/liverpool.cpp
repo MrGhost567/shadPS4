@@ -177,7 +177,7 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
                                            SequenceNum seqnum) {
     TracyFiberEnter(dcb_task_name);
 
-    LOG_DEBUG(Lib_GnmDriver, "dcb {}, ccb {}, {}", dcb, ccb, SubmitId{QueueType::dcb, seqnum});
+    LOG_DEBUG(Lib_GnmDriver, "dcb {}, ccb {}, {}", dcb, ccb, seqnum);
 
     cblock.Reset();
 
@@ -599,7 +599,7 @@ Liverpool::Task Liverpool::ProcessCompute(u32 idx, int vqid, SequenceNum seqnum)
         }
     }
 
-    LOG_DEBUG(Lib_GnmDriver, "vqid {}, acb {}, {}", vqid, acb, SubmitId{QueueType::acb, seqnum});
+    LOG_DEBUG(Lib_GnmDriver, "vqid {}, acb {}, {}", vqid, acb, seqnum);
 
     while (!acb.empty()) {
         const auto* header = reinterpret_cast<const PM4Header*>(acb.data());
@@ -737,30 +737,9 @@ std::pair<std::span<const u32>, std::span<const u32>> Liverpool::CopyCmdBuffers(
     return std::make_pair(dcb, ccb);
 }
 
-std::span<const u32> Liverpool::CopyComputeCmdBuffer(u32 vqid, std::span<const u32> acb) {
-    auto& queue = mapped_queues[vqid];
-
-    ASSERT_MSG(queue.acb_buffer.capacity() >= queue.acb_buffer_offset + acb.size(),
-               "acb copy buffer out of reserved space");
-
-    queue.acb_buffer.resize(
-        std::max(queue.acb_buffer.size(), queue.acb_buffer_offset + acb.size()));
-
-    u32 prev_acb_buffer_offset = queue.acb_buffer_offset;
-    if (!acb.empty()) {
-        std::memcpy(queue.acb_buffer.data() + queue.acb_buffer_offset, acb.data(),
-                    acb.size_bytes());
-        queue.acb_buffer_offset += acb.size();
-        acb = std::span<const u32>{queue.acb_buffer.begin() + prev_acb_buffer_offset,
-                                   queue.acb_buffer.begin() + queue.acb_buffer_offset};
-    }
-
-    return acb;
-}
-
 void Liverpool::SubmitGfx(std::span<const u32> dcb, std::span<const u32> ccb, SequenceNum seqnum) {
     auto& queue = mapped_queues[GfxQueueId];
-    LOG_DEBUG(Lib_GnmDriver, "gfx queue {}, {}", queue, SubmitId{QueueType::dcb, seqnum});
+    LOG_DEBUG(Lib_GnmDriver, "dcb {}, {}", dcb, seqnum);
 
     if (Config::copyGPUCmdBuffers()) {
         std::tie(dcb, ccb) = CopyCmdBuffers(dcb, ccb);
@@ -785,8 +764,7 @@ void Liverpool::SubmitAsc(u32 vqid, std::span<const u32> acb, SequenceNum seqnum
 
     // shouldnt mapped_queues use index vqid + 1 (physical?)
     auto& queue = mapped_queues[vqid];
-    LOG_DEBUG(Lib_GnmDriver, "vqid {}, acb {}, queue {}, {}", vqid, acb, queue,
-              SubmitId{QueueType::acb, seqnum});
+    LOG_DEBUG(Lib_GnmDriver, "vqid {}, acb {}, {}", vqid, acb, seqnum);
 
     if (Config::copyGPUCmdBuffers()) {
         // acb = CopyComputeCmdBuffer(vqid, acb);
