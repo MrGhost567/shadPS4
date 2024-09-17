@@ -832,10 +832,10 @@ void PS4_SYSV_ABI sceGnmDingDong(u32 gnm_vqid, u32 next_offs_dw) {
 
     auto vqid = gnm_vqid - 1;
     auto& asc_queue = asc_queues[{vqid}];
-    AmdGpu::Liverpool::SequenceNum seqnum(last_frame_num, gnm_vqid, seq_num);
+    AmdGpu::Liverpool::SequenceNum seqnum(AmdGpu::Liverpool::QueueType::acb, last_frame_num,
+                                          gnm_vqid, seq_num);
     if (*asc_queue.read_addr > ((next_offs_dw % asc_queue.ring_size_dw) << 2)) {
-        LOG_DEBUG(Lib_GnmDriver, "ring buffer wrapping around, vqid {}, seq num {}", vqid,
-                  AmdGpu::Liverpool::SubmitId{AmdGpu::Liverpool::QueueType::acb, seqnum});
+        LOG_DEBUG(Lib_GnmDriver, "ring buffer wrapping around, vqid {}, seq num {}", vqid, seqnum);
         next_offs_dw = asc_queue.ring_size_dw + (next_offs_dw % asc_queue.ring_size_dw);
     } else {
         next_offs_dw %= asc_queue.ring_size_dw;
@@ -863,8 +863,7 @@ void PS4_SYSV_ABI sceGnmDingDong(u32 gnm_vqid, u32 next_offs_dw) {
     }
 
     LOG_DEBUG(Lib_GnmDriver, "vqid {}, next_offset_dw {}, acb {}, asc queue {}, seq num {}", vqid,
-              next_offs_dw, acb_span, asc_queue,
-              AmdGpu::Liverpool::SubmitId{AmdGpu::Liverpool::QueueType::acb, seqnum});
+              next_offs_dw, acb_span, asc_queue, seqnum);
 
     liverpool->SubmitAsc(vqid, acb_span, seqnum);
 
@@ -2440,13 +2439,16 @@ s32 PS4_SYSV_ABI sceGnmSubmitCommandBuffers(u32 count, const u32* dcb_gpu_addrs[
     if (send_init_packet) {
         if (sdk_version <= 0x1ffffffu) {
             liverpool->SubmitGfx(InitSequence, {},
-                                 AmdGpu::Liverpool::SequenceNum(77777777, 77777777, 77777777));
+                                 AmdGpu::Liverpool::SequenceNum(AmdGpu::Liverpool::QueueType::dcb,
+                                                                77777777, 77777777, 77777777));
         } else if (sdk_version <= 0x3ffffffu) {
             liverpool->SubmitGfx(InitSequence200, {},
-                                 AmdGpu::Liverpool::SequenceNum(77777777, 77777777, 77777777));
+                                 AmdGpu::Liverpool::SequenceNum(AmdGpu::Liverpool::QueueType::dcb,
+                                                                77777777, 77777777, 77777777));
         } else {
             liverpool->SubmitGfx(InitSequence350, {},
-                                 AmdGpu::Liverpool::SequenceNum(77777777, 77777777, 77777777));
+                                 AmdGpu::Liverpool::SequenceNum(AmdGpu::Liverpool::QueueType::dcb,
+                                                                77777777, 77777777, 77777777));
         }
         send_init_packet = false;
     }
@@ -2479,7 +2481,8 @@ s32 PS4_SYSV_ABI sceGnmSubmitCommandBuffers(u32 count, const u32* dcb_gpu_addrs[
         }
 
         liverpool->SubmitGfx(dcb_span, ccb_span,
-                             AmdGpu::Liverpool::SequenceNum(last_frame_num, seq_num, cbpair));
+                             AmdGpu::Liverpool::SequenceNum(AmdGpu::Liverpool::QueueType::dcb,
+                                                            last_frame_num, seq_num, cbpair));
     }
 
     return ORBIS_OK;
