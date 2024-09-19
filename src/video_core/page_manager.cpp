@@ -178,7 +178,7 @@ struct PageManager::Impl {
 #endif
 
 #ifndef IS_WRITE_ERROR
-#error "Missing IS_WRITE_ERROR() implementation for target OS and CPU architecture.
+#error "Missing IS_WRITE_ERROR() implementation for target OS and CPU architecture."
 #endif
 
 struct PageManager::Impl {
