@@ -241,6 +241,8 @@ public:
     std::array<SpirvAttribute, 32> input_params{};
     std::array<SpirvAttribute, 32> output_params{};
 
+    boost::container::small_vector<boost::container::small_vector<Id, 4>, 4> va_arg_lists;
+
 private:
     void DefineArithmeticTypes();
     void DefineInterfaces();
