@@ -219,6 +219,4 @@ private:
     uintptr_t file_mapping = 0;
 };
 
-u64 GetDirectorySize(const std::filesystem::path& path);
-
 } // namespace Common::FS

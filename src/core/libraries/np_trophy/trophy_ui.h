@@ -31,6 +31,10 @@ public:
     void Finish();
 
     void Draw() override;
+
+    bool ShouldGrabGamepad() override {
+        return false;
+    }
 };
 
 }; // namespace Libraries::NpTrophy

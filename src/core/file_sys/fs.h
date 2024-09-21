@@ -22,19 +22,16 @@ public:
     struct MntPair {
         std::filesystem::path host_path;
         std::string mount; // e.g /app0/
-        bool read_only;
     };
 
     explicit MntPoints() = default;
     ~MntPoints() = default;
 
-    void Mount(const std::filesystem::path& host_folder, const std::string& guest_folder,
-               bool read_only = false);
+    void Mount(const std::filesystem::path& host_folder, const std::string& guest_folder);
     void Unmount(const std::filesystem::path& host_folder, const std::string& guest_folder);
     void UnmountAll();
 
-    std::filesystem::path GetHostPath(std::string_view guest_directory,
-                                      bool* is_read_only = nullptr);
+    std::filesystem::path GetHostPath(std::string_view guest_directory);
 
     const MntPair* GetMount(const std::string& guest_path) {
         std::scoped_lock lock{m_mutex};
