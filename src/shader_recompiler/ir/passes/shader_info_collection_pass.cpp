@@ -64,7 +64,7 @@ void Visit(Info& info, IR::Inst& inst) {
         info.uses_lane_id = true;
         break;
     case IR::Opcode::ReadConst:
-        info.has_readconst = true;
+        // info.has_readconst = true;
         break;
     default:
         break;
