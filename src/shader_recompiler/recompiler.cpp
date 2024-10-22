@@ -8,6 +8,10 @@
 #include "shader_recompiler/ir/post_order.h"
 #include "shader_recompiler/recompiler.h"
 
+#include "common/config.h"
+#include "common/io_file.h"
+#include "common/path_util.h"
+
 namespace Shader {
 
 IR::BlockList GenerateBlocks(const IR::AbstractSyntaxList& syntax_list) {
@@ -57,13 +61,36 @@ IR::Program TranslateProgram(std::span<const u32> code, Pools& pools, Info& info
     program.blocks = GenerateBlocks(program.syntax_list);
     program.post_order_blocks = Shader::IR::PostOrder(program.syntax_list.front());
 
+    bool dump_ir = true;
+    bool extra_id_removal = true; // TODO remove all this stuff
+    auto dumpMatchingIR = [&](std::string phase) {
+        if (dump_ir) {
+            if (Config::dumpShaders()) {
+                std::string s = IR::DumpProgram(program);
+                using namespace Common::FS;
+                const auto dump_dir = GetUserPath(PathType::ShaderDir) / "dumps";
+                if (!std::filesystem::exists(dump_dir)) {
+                    std::filesystem::create_directories(dump_dir);
+                }
+                const auto filename =
+                    fmt::format("{}_{:#018x}.{}.ir.txt", info.stage, info.pgm_hash, phase);
+                const auto file = IOFile{dump_dir / filename, FileAccessMode::Write};
+                file.WriteString(s);
+            }
+        }
+    };
+
     // Run optimization passes
+    dumpMatchingIR("pre_ssa");
     Shader::Optimization::SsaRewritePass(program.post_order_blocks);
+    dumpMatchingIR("pre_const_prop");
     Shader::Optimization::ConstantPropagationPass(program.post_order_blocks);
     if (program.info.stage != Stage::Compute) {
+        dumpMatchingIR("pre_shared_mem");
         Shader::Optimization::LowerSharedMemToRegisters(program);
     }
     Shader::Optimization::RingAccessElimination(program, runtime_info, program.info.stage);
+    dumpMatchingIR("pre_resource_tracking");
     Shader::Optimization::ResourceTrackingPass(program);
     Shader::Optimization::IdentityRemovalPass(program.blocks);
     Shader::Optimization::DeadCodeEliminationPass(program);
