@@ -45,6 +45,36 @@ bool Rasterizer::FilterDraw() {
     const auto& regs = liverpool->regs;
     // Tessellation is unsupported so skip the draw to avoid locking up the driver.
     if (regs.primitive_type == AmdGpu::PrimitiveType::PatchPrimitive) {
+        ASSERT(regs.stage_enable.raw == 0x45u);
+
+        const auto* vs_pgm = regs.ProgramForStage(static_cast<u32>(Shader::Stage::Local));
+        auto vs_params = Liverpool::GetParams(*vs_pgm);
+
+        const auto* tcs_pgm = regs.ProgramForStage(static_cast<u32>(Shader::Stage::Hull));
+        auto tcs_params = Liverpool::GetParams(*tcs_pgm);
+
+        const auto* tes_pgm = regs.ProgramForStage(static_cast<u32>(Shader::Stage::Vertex));
+        auto tes_params = Liverpool::GetParams(*tes_pgm);
+
+        static std::set<std::tuple<u64, u64, u64>> vtgs_perms;
+        static int count = 0;
+
+        auto [_, new_perm] =
+            vtgs_perms.emplace(std::make_tuple(vs_params.hash, tcs_params.hash, tes_params.hash));
+
+        if (!new_perm) {
+            return false;
+        }
+
+        pipeline_cache.DumpShader(vs_params.code, vs_params.hash, Shader::Stage::Local, count,
+                                  "tess_vert.bin");
+        pipeline_cache.DumpShader(tcs_params.code, tcs_params.hash, Shader::Stage::Hull, count,
+                                  "tess_tcs.bin");
+        pipeline_cache.DumpShader(tes_params.code, tes_params.hash, Shader::Stage::Vertex, count,
+                                  "tess_tes.bin");
+
+        ++count;
+
         return false;
     }
     // There are several cases (e.g. FCE, FMask/HTile decompression) where we don't need to do an
