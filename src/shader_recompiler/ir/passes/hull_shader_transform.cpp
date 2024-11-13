@@ -325,7 +325,7 @@ private:
                        .DoMatch(node)) {
             if (within_mul) {
                 UNREACHABLE_MSG("Test");
-                products.back().as_factors.emplace_back(IR::U32{a});
+                products.back().as_factors.emplace_back(IR::U32{node});
             } else {
                 products.back().as_nested_value = IR::U32{a};
                 Visit(a);
